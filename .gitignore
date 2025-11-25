@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 data/*
 data/dataset/*
+
+tracking dataset (using LFS for large files)
+
+# allow data/dataset to be tracked (we will use Git LFS for large files)
+!data/dataset/
+!data/dataset/**
