@@ -208,8 +208,13 @@ __marimo__/
 data/*
 data/dataset/*
 
-tracking dataset (using LFS for large files)
+# large binary / model artifacts
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.parquet
 
-# allow data/dataset to be tracked (we will use Git LFS for large files)
+# allow data/dataset to be tracked (we use Git LFS for large files)
 !data/dataset/
 !data/dataset/**
