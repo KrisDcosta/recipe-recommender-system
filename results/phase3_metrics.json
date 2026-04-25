@@ -1,0 +1,45 @@
+{
+  "run": "phase3_time_aware_cli",
+  "date": "2026-04-25",
+  "data": {
+    "raw_interactions": 1132367,
+    "raw_recipes": 231637,
+    "zero_rated_interactions_dropped": 60847,
+    "zero_rated_share": 0.054,
+    "split": {
+      "strategy": "random",
+      "seed": 42,
+      "train": 750064,
+      "validation": 160728,
+      "test": 160728
+    }
+  },
+  "model": {
+    "name": "time_aware_mf",
+    "best_validation_rmse": 0.6808,
+    "test_rmse": 0.6834,
+    "ndcg_at_10": 0.2252,
+    "recall_at_10": 0.3153,
+    "ranking_users_evaluated": 50089
+  },
+  "cold_start": {
+    "cold_lt_5_interactions": {
+      "rmse": 0.7195,
+      "n": 67249
+    },
+    "medium_5_to_19_interactions": {
+      "rmse": 0.6426,
+      "n": 45498
+    },
+    "warm_ge_20_interactions": {
+      "rmse": 0.6688,
+      "n": 47981
+    }
+  },
+  "serving_verification": {
+    "pytest": "143 passed",
+    "fastapi_health": 200,
+    "docker_compose_health": 200,
+    "docker_compose_model_loaded": "time_aware_mf"
+  }
+}

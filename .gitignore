@@ -226,6 +226,8 @@ models/
 # Generated figures and results
 figures/
 results/
+!results/
+!results/phase3_metrics.json
 
 # MLflow tracking
 mlruns/

@@ -8,19 +8,21 @@ mean → time-aware MF → hybrid MF + LLM content embeddings.
 ## Results
 
 Zero-rated interactions dropped: Food.com allows reviews without an explicit star rating —
-these appear as 0 in the export and are not 1-star reviews.
+these appear as 0 in the export and are not 1-star reviews. See [`FINDINGS.md`](FINDINGS.md)
+for the full benchmark-integrity narrative.
 
 ### Warm-start evaluation (random 70/15/15 split)
 
-| Model | Test RMSE |
-|-------|-----------|
-| Recipe mean baseline | ~1.24 |
-| Linear regression (recipe features) | ~1.18 |
-| TF-IDF Ridge (ingredients) | ~1.17 |
-| LLM Ridge (all-MiniLM-L6-v2) | run notebook |
-| Static MF (SGD, k=10, λ=0.02) | ~0.73 |
-| Time-aware MF (SGD, k=5, λ=0.02) | **0.69** |
-| **Hybrid MF + LLM** | **run notebook** |
+| Model | Test RMSE | NDCG@10 | Recall@10 |
+|-------|----------:|--------:|----------:|
+| Recipe mean baseline | ~1.24 | - | - |
+| Linear regression (recipe features) | ~1.18 | - | - |
+| TF-IDF Ridge (ingredients) | ~1.17 | - | - |
+| Static MF (SGD, k=10, λ=0.02) | ~0.73 | run notebook | run notebook |
+| Time-aware MF (SGD, k=5, λ=0.02) | **0.6834** | **0.2252** | **0.3153** |
+| Hybrid MF + LLM | run notebook | run notebook | run notebook |
+
+The verified CLI run is exported in [`results/phase3_metrics.json`](results/phase3_metrics.json).
 
 ### Temporal evaluation (train < 2015, test ≥ 2015)
 
@@ -42,14 +44,16 @@ and paired t-test. Cohen's d effect size reported.
 - **Zero ratings verified**: 60,847 entries (5.4%) are 0. Food.com confirmed: no star submitted ≠ 1-star review. Both pipelines documented.
 - **Rating drift is real**: average rating fell ~0.4 points 2002→2014, partially recovered — time bins capture signal static MF misses.
 - **Time-aware improvement is statistically significant**: bootstrap CI and paired t-test confirm the gap is not sampling noise.
-- **LLM embeddings beat TF-IDF**: all-MiniLM-L6-v2 on recipe name + ingredients captures semantic similarity that bag-of-words misses.
-- **Hybrid model bridges cold-start gap**: new recipes with zero interactions still get meaningful predictions from the embedding branch.
+- **LLM embeddings add semantic content signal**: all-MiniLM-L6-v2 on recipe name + ingredients captures similarity that bag-of-words can miss.
+- **Hybrid architecture targets cold-start**: sparse recipes can use content embeddings when collaborative history is weak or unavailable.
+- **Production path verified**: CLI training writes model artifacts, FastAPI serves predictions, and Docker Compose returns `/health` with the trained model loaded.
 
 ## Project Structure
 
 ```
 .
 ├── assignment2_1.ipynb     # analysis notebook: EDA → models → evaluation
+├── FINDINGS.md             # benchmark integrity, zero-rating, drift, cold-start narrative
 ├── app/                    # FastAPI inference service
 │   ├── main.py             # startup model loading, /health
 │   ├── schemas.py          # Pydantic request/response schemas
@@ -73,6 +77,8 @@ and paired t-test. Cohen's d effect size reported.
 │   ├── test_metrics.py
 │   ├── test_embeddings.py
 │   └── test_hybrid.py
+├── results/
+│   └── phase3_metrics.json # committed summary of verified CLI/API/Docker run
 ├── models/                 # saved model artifacts (not in git)
 ├── data/dataset/           # RAW_recipes.csv + RAW_interactions.csv (not in git)
 ├── Dockerfile
@@ -137,6 +143,15 @@ Run with Docker Compose after training artifacts exist in `models/`:
 ```bash
 docker compose up --build
 curl http://localhost:8080/health
+```
+
+Verified Phase 3 serving stack:
+
+```text
+pytest: 143 passed
+FastAPI /health: 200 OK
+Docker Compose /health: 200 OK
+Loaded model: time_aware_mf
 ```
 
 ## Notebook Sections
