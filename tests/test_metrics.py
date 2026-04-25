@@ -6,6 +6,7 @@ import pytest
 
 from src.metrics import (
     bootstrap_ci,
+    cold_start_rmse,
     ndcg_at_k,
     paired_ttest,
     recall_at_k,
@@ -173,3 +174,53 @@ class TestSampledEvaluation:
         assert "recall@5" in result
         assert 0.0 <= result["ndcg@5"] <= 1.0
         assert 0.0 <= result["recall@5"] <= 1.0
+
+
+class TestColdStartRmse:
+    def test_returns_all_buckets(self, preprocessed_df):
+        from src.models import StaticMF
+        from src.splits import random_split
+        split = random_split(preprocessed_df, seed=42)
+        model = StaticMF(k=2, epochs=2, patience=1).fit(split.train, split.val)
+        result = cold_start_rmse(model, split.test, split.train)
+        assert len(result) == 3
+
+    def test_bucket_keys_present(self, preprocessed_df):
+        from src.models import StaticMF
+        from src.splits import random_split
+        split = random_split(preprocessed_df, seed=42)
+        model = StaticMF(k=2, epochs=2, patience=1).fit(split.train, split.val)
+        result = cold_start_rmse(model, split.test, split.train)
+        for label, stats in result.items():
+            assert "rmse" in stats
+            assert "n" in stats
+
+    def test_rmse_positive_or_nan(self, preprocessed_df):
+        from src.models import StaticMF
+        from src.splits import random_split
+        import math
+        split = random_split(preprocessed_df, seed=42)
+        model = StaticMF(k=2, epochs=2, patience=1).fit(split.train, split.val)
+        result = cold_start_rmse(model, split.test, split.train)
+        for label, stats in result.items():
+            if stats["n"] > 0:
+                assert stats["rmse"] >= 0.0
+            else:
+                assert math.isnan(stats["rmse"])
+
+    def test_n_sums_to_test_size(self, preprocessed_df):
+        from src.models import StaticMF
+        from src.splits import random_split
+        split = random_split(preprocessed_df, seed=42)
+        model = StaticMF(k=2, epochs=2, patience=1).fit(split.train, split.val)
+        result = cold_start_rmse(model, split.test, split.train)
+        total = sum(s["n"] for s in result.values())
+        assert total == len(split.test)
+
+    def test_custom_bins(self, preprocessed_df):
+        from src.models import StaticMF
+        from src.splits import random_split
+        split = random_split(preprocessed_df, seed=42)
+        model = StaticMF(k=2, epochs=2, patience=1).fit(split.train, split.val)
+        result = cold_start_rmse(model, split.test, split.train, bins=[0, 10])
+        assert len(result) == 2

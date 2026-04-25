@@ -218,3 +218,21 @@ data/dataset/*
 # allow data/dataset to be tracked (we use Git LFS for large files)
 !data/dataset/
 !data/dataset/**
+
+# Model artifacts — trained at runtime, not committed
+models/
+!models/.gitkeep
+
+# Generated figures and results
+figures/
+results/
+
+# MLflow tracking
+mlruns/
+mlflow.db
+
+# Docker
+.env
+
+# macOS
+.DS_Store

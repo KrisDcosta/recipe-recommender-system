@@ -20,11 +20,21 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov",
+    "httpx>=0.27",
+]
+embeddings = [
+    "sentence-transformers>=2.2",
+    "torch",
+]
+api = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

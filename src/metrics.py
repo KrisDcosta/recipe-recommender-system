@@ -164,6 +164,54 @@ def sampled_evaluation(
 
 
 # ---------------------------------------------------------------------------
+# Cold-start analysis
+# ---------------------------------------------------------------------------
+
+def cold_start_rmse(
+    model: Any,
+    test_df: pd.DataFrame,
+    train_df: pd.DataFrame,
+    bins: list[int] | None = None,
+) -> dict[str, dict]:
+    """RMSE breakdown by item interaction count in training data.
+
+    Buckets items in test_df by how many times they appear in train_df,
+    then computes RMSE separately for each bucket.
+
+    Default bins [0, 5, 20] → cold (<5 interactions), medium (5-19), warm (≥20).
+    Returns: {label: {"rmse": float, "n": int}}
+    """
+    if bins is None:
+        bins = [0, 5, 20]
+
+    item_counts = train_df.groupby("recipe_id").size().to_dict()
+    edges = bins + [float("inf")]
+
+    results: dict[str, dict] = {}
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        if lo == 0:
+            label = f"cold (<{int(hi)} interactions)"
+        elif hi == float("inf"):
+            label = f"warm (≥{int(lo)} interactions)"
+        else:
+            label = f"medium ({int(lo)}–{int(hi)-1} interactions)"
+
+        mask = test_df["recipe_id"].map(lambda rid: lo <= item_counts.get(rid, 0) < hi)
+        subset = test_df[mask]
+
+        if len(subset) == 0:
+            results[label] = {"rmse": float("nan"), "n": 0}
+            continue
+
+        preds = model.predict_batch(subset)
+        bucket_rmse = rmse(subset["rating"].to_numpy(dtype=float), preds)
+        results[label] = {"rmse": bucket_rmse, "n": len(subset)}
+        logger.info("cold_start_rmse [%s]: n=%d  rmse=%.4f", label, len(subset), bucket_rmse)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Statistical comparison (A/B framework)
 # ---------------------------------------------------------------------------
 

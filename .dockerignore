@@ -1,0 +1,36 @@
+# Data — too large, mounted at runtime
+data/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Dev/test
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebooks and results
+*.ipynb
+*.pdf
+figures/
+results/
+mlruns/
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Models are mounted at runtime (not baked into image)
+# Comment out if you want to bake small test models into the image
+models/
