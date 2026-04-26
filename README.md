@@ -1,5 +1,8 @@
 # Recipe Recommender: Time-Aware Collaborative Filtering + LLM Embeddings
 
+[![CI](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/ci.yml)
+[![Deploy to Cloud Run](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/deploy.yml/badge.svg)](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/deploy.yml)
+
 Rating prediction and top-N recommendation on 1.1M Food.com interactions (231K recipes,
 2000–2018). The project has two threads: (1) benchmark integrity — fixing a broken
 evaluation split and verifying zero-rating semantics; (2) model progression from global
@@ -48,6 +51,12 @@ and paired t-test. Cohen's d effect size reported.
 - **Hybrid architecture targets cold-start**: sparse recipes can use content embeddings when collaborative history is weak or unavailable.
 - **Production path verified**: CLI training writes model artifacts, FastAPI serves predictions, and Docker Compose returns `/health` with the trained model loaded.
 
+## Architecture
+
+![Recipe recommender architecture](docs/architecture.png)
+
+Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
+
 ## Project Structure
 
 ```
@@ -80,9 +89,12 @@ and paired t-test. Cohen's d effect size reported.
 │   └── test_hybrid.py
 ├── results/
 │   └── phase3_metrics.json # committed summary of verified CLI/API/Docker run
+├── docs/
+│   ├── architecture.excalidraw
+│   ├── architecture.png
+│   └── deployment.md       # CI/CD, Cloud Run, and GCS artifact setup
 ├── models/                 # saved model artifacts (not in git)
 ├── data/dataset/           # RAW_recipes.csv + RAW_interactions.csv (not in git)
-├── docs/deployment.md      # CI/CD, Cloud Run, and GCS artifact setup
 ├── Dockerfile
 ├── docker-compose.yml
 ├── cloudbuild.yaml
@@ -123,7 +135,9 @@ python scripts/evaluate.py --model models/hybrid_mf.joblib --data-dir data/datas
 python scripts/embed_recipes.py --data-dir data/dataset --output models/recipe_embedder.joblib
 ```
 
-The training pipeline writes the model artifacts plus `models/user_rated.joblib`, which the API uses to exclude recipes already rated by a user.
+The training pipeline writes the MF model artifacts plus `models/user_rated.joblib`,
+which the API uses to exclude recipes already rated by a user. The recipe embedder is
+generated separately and enables `/similar`.
 
 Run the API locally:
 
@@ -154,7 +168,7 @@ Verified Phase 3 serving stack:
 pytest: 143 passed
 FastAPI /health: 200 OK
 Docker Compose /health: 200 OK
-Loaded model: time_aware_mf
+Loaded model artifacts: time_aware_mf, embedder
 ```
 
 ## CI/CD and Cloud Run
@@ -172,6 +186,21 @@ curl https://recipe-recommender-tyhw3omfqq-uc.a.run.app/health
 curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/predict \
   -H "Content-Type: application/json" \
   -d '{"user_id": 123, "recipe_id": 456, "date": "2015-06"}'
+curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/similar \
+  -H "Content-Type: application/json" \
+  -d '{"recipe_id": 456, "top_n": 2}'
+```
+
+Verified `/similar` response:
+
+```json
+{
+  "seed_recipe_id": 456,
+  "similar": [
+    {"recipe_id": 153501, "name": "easy dal", "similarity": 0.9415},
+    {"recipe_id": 81727, "name": "yellow lentil dal", "similarity": 0.9411}
+  ]
+}
 ```
 
 GitHub Actions workflows live in `.github/workflows/`:
@@ -179,7 +208,9 @@ GitHub Actions workflows live in `.github/workflows/`:
 - `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
 - `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, and deploys to Cloud Run on pushes to `main`.
 
-Cloud Run loads model artifacts from GCS at startup when local mounted files are absent.
+Cloud Run loads both MF and embedder artifacts from GCS at startup when local mounted
+files are absent. `/health` reports `time_aware_mf` and `embedder` when both artifacts
+are available.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
 variables, GCS artifact layout, and the optional Cloud Build path.
 

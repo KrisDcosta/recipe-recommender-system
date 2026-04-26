@@ -48,9 +48,12 @@ Required GCS artifacts:
 ```text
 gs://.../models/time_aware_mf.joblib
 gs://.../models/user_rated.joblib
-gs://.../models/recipe_embedder.joblib    # optional; enables /similar
+gs://.../models/recipe_embedder.joblib    # enables /similar
 gs://.../data/RAW_recipes.csv
 ```
+
+The verified Cloud Run deployment loads both `time_aware_mf` and `embedder` at
+startup; `/health` reports both artifacts when they are available.
 
 The Cloud Run service account needs read access to the GCS bucket. The deploy service
 account needs permissions to push to Artifact Registry and deploy Cloud Run services.
