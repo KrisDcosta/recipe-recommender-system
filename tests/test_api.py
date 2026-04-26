@@ -30,7 +30,7 @@ _install_st_stub()
 # ── Imports ───────────────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import _build_user_rated, _parse_gcs_uri  # noqa: E402
+from app.main import _build_user_rated, _download_gcs_prefix, _parse_gcs_uri  # noqa: E402
 from app.schemas import PredictRequest  # noqa: E402
 from src.embeddings import RecipeEmbedder  # noqa: E402
 
@@ -136,6 +136,35 @@ class TestStartupArtifactHelpers:
     def test_parse_gcs_uri_rejects_non_gcs(self):
         with pytest.raises(ValueError):
             _parse_gcs_uri("s3://bucket/path")
+
+    def test_download_gcs_prefix_uses_bucket_name(self, monkeypatch, tmp_path):
+        calls = {}
+
+        class _Blob:
+            name = "models/time_aware_mf.joblib"
+
+            def download_to_filename(self, target):
+                calls["target"] = str(target)
+
+        class _Client:
+            def bucket(self, bucket_name):
+                calls["bucket"] = bucket_name
+                return object()
+
+            def list_blobs(self, bucket_name, prefix):
+                calls["list_blobs"] = (bucket_name, prefix)
+                return [_Blob()]
+
+        storage_stub = types.ModuleType("storage")
+        storage_stub.Client = _Client
+        google_cloud_stub = types.ModuleType("google.cloud")
+        google_cloud_stub.storage = storage_stub
+        monkeypatch.setitem(sys.modules, "google.cloud", google_cloud_stub)
+        monkeypatch.setitem(sys.modules, "google.cloud.storage", storage_stub)
+
+        assert _download_gcs_prefix("gs://bucket/models", tmp_path) == 1
+        assert calls["list_blobs"] == ("bucket", "models")
+        assert calls["target"].endswith("time_aware_mf.joblib")
 
 
 # ── /predict ──────────────────────────────────────────────────────────────────

@@ -57,7 +57,7 @@ def _download_gcs_prefix(uri: str, destination: Path) -> int:
     destination.mkdir(parents=True, exist_ok=True)
 
     n_downloaded = 0
-    for blob in client.list_blobs(bucket, prefix=prefix):
+    for blob in client.list_blobs(bucket_name, prefix=prefix):
         if blob.name.endswith("/"):
             continue
         relative = Path(blob.name[len(prefix):].lstrip("/")) if prefix else Path(blob.name)
