@@ -1,0 +1,75 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SERVICE_NAME: recipe-recommender
+  GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY || 'recipe-recommender' }}
+
+jobs:
+  deploy:
+    name: Build, push, and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${SERVICE_NAME}:${GITHUB_SHA}"
+          docker build --target runtime -t "${IMAGE}" .
+          echo "IMAGE=${IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Push image
+        run: docker push "${IMAGE}"
+
+      - name: Deploy Cloud Run service
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          MODEL_GCS_URI: ${{ vars.MODEL_GCS_URI }}
+          RECIPES_GCS_URI: ${{ vars.RECIPES_GCS_URI }}
+        run: |
+          gcloud run deploy "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${IMAGE}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},LOG_LEVEL=info" \
+            --quiet
+
+      - name: Print service URL
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services describe "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format 'value(status.url)'

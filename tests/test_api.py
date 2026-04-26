@@ -30,7 +30,7 @@ _install_st_stub()
 # ── Imports ───────────────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import _build_user_rated  # noqa: E402
+from app.main import _build_user_rated, _parse_gcs_uri  # noqa: E402
 from app.schemas import PredictRequest  # noqa: E402
 from src.embeddings import RecipeEmbedder  # noqa: E402
 
@@ -122,6 +122,20 @@ class TestHealth:
     def test_n_recipes(self, client):
         r = client.get("/health")
         assert r.json()["n_recipes"] == 3
+
+
+# ── Startup artifact helpers ─────────────────────────────────────────────────
+
+class TestStartupArtifactHelpers:
+    def test_parse_gcs_uri_with_prefix(self):
+        assert _parse_gcs_uri("gs://bucket/path/to/models") == ("bucket", "path/to/models")
+
+    def test_parse_gcs_uri_with_bucket_only(self):
+        assert _parse_gcs_uri("gs://bucket") == ("bucket", "")
+
+    def test_parse_gcs_uri_rejects_non_gcs(self):
+        with pytest.raises(ValueError):
+            _parse_gcs_uri("s3://bucket/path")
 
 
 # ── /predict ──────────────────────────────────────────────────────────────────

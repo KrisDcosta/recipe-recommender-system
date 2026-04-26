@@ -7,6 +7,8 @@ Environment variables
 ---------------------
 MODEL_DIR      path to directory containing .joblib files  (default: models)
 RECIPES_CSV    path to RAW_recipes.csv                     (default: data/dataset/RAW_recipes.csv)
+MODEL_GCS_URI  optional gs://bucket/prefix for model artifacts
+RECIPES_GCS_URI optional gs://bucket/path/RAW_recipes.csv
 LOG_LEVEL      uvicorn/app log level                       (default: info)
 """
 from __future__ import annotations
@@ -31,6 +33,73 @@ USER_RATED_PATH = Path(os.getenv("USER_RATED_PATH", MODEL_DIR / "user_rated.jobl
 TRAIN_INTERACTIONS_CSV = Path(
     os.getenv("TRAIN_INTERACTIONS_CSV", "data/dataset/interactions_train.csv")
 )
+MODEL_GCS_URI = os.getenv("MODEL_GCS_URI")
+RECIPES_GCS_URI = os.getenv("RECIPES_GCS_URI")
+
+
+def _parse_gcs_uri(uri: str) -> tuple[str, str]:
+    """Return (bucket, object_or_prefix) for a gs:// URI."""
+    if not uri.startswith("gs://"):
+        raise ValueError("GCS URI must start with gs://")
+    without_scheme = uri[5:]
+    bucket, _, path = without_scheme.partition("/")
+    if not bucket:
+        raise ValueError("GCS URI must include a bucket name")
+    return bucket, path.strip("/")
+
+
+def _download_gcs_prefix(uri: str, destination: Path) -> int:
+    """Download all objects under a GCS prefix into destination."""
+    from google.cloud import storage
+
+    bucket_name, prefix = _parse_gcs_uri(uri)
+    client = storage.Client()
+    destination.mkdir(parents=True, exist_ok=True)
+
+    n_downloaded = 0
+    for blob in client.list_blobs(bucket, prefix=prefix):
+        if blob.name.endswith("/"):
+            continue
+        relative = Path(blob.name[len(prefix):].lstrip("/")) if prefix else Path(blob.name)
+        if str(relative) in ("", "."):
+            relative = Path(blob.name).name
+        if not str(relative):
+            continue
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading gs://%s/%s -> %s", bucket_name, blob.name, target)
+        blob.download_to_filename(target)
+        n_downloaded += 1
+
+    if n_downloaded == 0:
+        raise RuntimeError(f"No GCS objects found under {uri}")
+    return n_downloaded
+
+
+def _download_gcs_file(uri: str, destination: Path) -> None:
+    """Download one GCS object to destination."""
+    from google.cloud import storage
+
+    bucket_name, object_name = _parse_gcs_uri(uri)
+    if not object_name:
+        raise ValueError("GCS file URI must include an object path")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Downloading gs://%s/%s -> %s", bucket_name, object_name, destination)
+    storage.Client().bucket(bucket_name).blob(object_name).download_to_filename(destination)
+
+
+def _ensure_cloud_artifacts() -> None:
+    """Download Cloud Run artifacts when local mounts are absent."""
+    has_local_model = (
+        (MODEL_DIR / "hybrid_mf.joblib").exists()
+        or (MODEL_DIR / "time_aware_mf.joblib").exists()
+    )
+    if MODEL_GCS_URI and not has_local_model:
+        n_downloaded = _download_gcs_prefix(MODEL_GCS_URI, MODEL_DIR)
+        logger.info("Downloaded %d model artifact(s) from %s", n_downloaded, MODEL_GCS_URI)
+
+    if RECIPES_GCS_URI and not RECIPES_CSV.exists():
+        _download_gcs_file(RECIPES_GCS_URI, RECIPES_CSV)
 
 
 def _build_user_rated(interactions: pd.DataFrame) -> dict:
@@ -47,6 +116,7 @@ async def lifespan(app: FastAPI):
     import joblib
 
     state: dict = {}
+    _ensure_cloud_artifacts()
 
     # ── Hybrid MF (primary model) ─────────────────────────────────────────
     hybrid_path = MODEL_DIR / "hybrid_mf.joblib"

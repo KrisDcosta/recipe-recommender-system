@@ -54,6 +54,7 @@ and paired t-test. Cohen's d effect size reported.
 .
 ├── assignment2_1.ipynb     # analysis notebook: EDA → models → evaluation
 ├── FINDINGS.md             # benchmark integrity, zero-rating, drift, cold-start narrative
+├── .github/workflows/      # CI and Cloud Run deployment workflows
 ├── app/                    # FastAPI inference service
 │   ├── main.py             # startup model loading, /health
 │   ├── schemas.py          # Pydantic request/response schemas
@@ -81,8 +82,10 @@ and paired t-test. Cohen's d effect size reported.
 │   └── phase3_metrics.json # committed summary of verified CLI/API/Docker run
 ├── models/                 # saved model artifacts (not in git)
 ├── data/dataset/           # RAW_recipes.csv + RAW_interactions.csv (not in git)
+├── docs/deployment.md      # CI/CD, Cloud Run, and GCS artifact setup
 ├── Dockerfile
 ├── docker-compose.yml
+├── cloudbuild.yaml
 ├── pyproject.toml
 └── requirements.txt
 ```
@@ -153,6 +156,17 @@ FastAPI /health: 200 OK
 Docker Compose /health: 200 OK
 Loaded model: time_aware_mf
 ```
+
+## CI/CD and Cloud Run
+
+GitHub Actions workflows live in `.github/workflows/`:
+
+- `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
+- `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, and deploys to Cloud Run on pushes to `main`.
+
+Cloud Run loads model artifacts from GCS at startup when local mounted files are absent.
+See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
+variables, GCS artifact layout, and the optional Cloud Build path.
 
 ## Notebook Sections
 
