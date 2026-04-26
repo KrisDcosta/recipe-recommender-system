@@ -14,32 +14,48 @@ Zero-rated interactions dropped: Food.com allows reviews without an explicit sta
 these appear as 0 in the export and are not 1-star reviews. See [`FINDINGS.md`](FINDINGS.md)
 for the full benchmark-integrity narrative.
 
-### Warm-start evaluation (random 70/15/15 split)
+### Verified warm-start evaluation (random 70/15/15 split)
+
+These values are from the current reproducible pipeline after dropping Food.com zero-rating
+rows and splitting with seed 42.
 
 | Model | Test RMSE | NDCG@10 | Recall@10 |
 |-------|----------:|--------:|----------:|
-| Recipe mean baseline | ~1.24 | - | - |
-| Linear regression (recipe features) | ~1.18 | - | - |
-| TF-IDF Ridge (ingredients) | ~1.17 | - | - |
-| Static MF (SGD, k=10, λ=0.02) | ~0.73 | run notebook | run notebook |
+| Global mean baseline | 0.7251 | - | - |
+| Recipe mean baseline | 0.7677 | - | - |
 | Time-aware MF (SGD, k=5, λ=0.02) | **0.6834** | **0.2252** | **0.3153** |
-| Hybrid MF + LLM | run notebook | run notebook | run notebook |
 
 The verified CLI run is exported in [`results/phase3_metrics.json`](results/phase3_metrics.json).
+The current production service loads this MF artifact plus the recipe embedder used by
+`/similar`; a committed `hybrid_mf.joblib` rating artifact is not part of the current
+deployment.
 
-### Temporal evaluation (train < 2015, test ≥ 2015)
+### Data and split
 
-| Model | Test RMSE | NDCG@10 | Recall@10 |
-|-------|-----------|---------|-----------|
-| Time-aware MF | run notebook | run notebook | run notebook |
+| Quantity | Value |
+|----------|------:|
+| Raw interactions | 1,132,367 |
+| Raw recipes | 231,637 |
+| Zero-rated rows dropped | 60,847 |
+| Zero-rated share | 5.4% |
+| Train rows | 750,064 |
+| Validation rows | 160,728 |
+| Test rows | 160,728 |
+| Best validation RMSE | 0.6808 |
 
-> Temporal RMSE is higher than warm-start (expected). Cold-start users/items fall back
-> to global mean — see Section 5 for the breakdown.
+### Cold-start breakdown for deployed model
+
+| Item bucket | Test rows | RMSE |
+|-------------|----------:|-----:|
+| Cold, fewer than 5 training interactions | 67,249 | 0.7195 |
+| Medium, 5-19 training interactions | 45,498 | 0.6426 |
+| Warm, at least 20 training interactions | 47,981 | 0.6688 |
 
 ### Statistical validation (Section 7)
 
-Time-aware MF improvement over static MF validated via bootstrap CI (10K resamples)
-and paired t-test. Cohen's d effect size reported.
+The notebook includes the bootstrap/paired-test framework for model comparisons. The
+repo-visible production metrics above are the concrete values verified by the current
+CLI/API/Docker/Cloud Run path.
 
 ## Key Findings
 
