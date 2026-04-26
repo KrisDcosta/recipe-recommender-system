@@ -39,6 +39,7 @@ Required GitHub Actions variables:
 |------|---------|---------|
 | `GCP_REGION` | `us-central1` | Cloud Run and Artifact Registry region |
 | `GAR_REPOSITORY` | `recipe-recommender` | Artifact Registry Docker repository |
+| `RUN_SERVICE_ACCOUNT` | `recipe-recommender-run@PROJECT_ID.iam.gserviceaccount.com` | Runtime identity used by Cloud Run to read GCS artifacts |
 | `MODEL_GCS_URI` | `gs://recipe-recommender-models/models` | Prefix containing `.joblib` artifacts |
 | `RECIPES_GCS_URI` | `gs://recipe-recommender-models/data/RAW_recipes.csv` | Recipe metadata CSV |
 
