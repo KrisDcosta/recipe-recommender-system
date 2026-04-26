@@ -159,6 +159,21 @@ Loaded model: time_aware_mf
 
 ## CI/CD and Cloud Run
 
+Live API:
+
+```text
+https://recipe-recommender-tyhw3omfqq-uc.a.run.app
+```
+
+Smoke test:
+
+```bash
+curl https://recipe-recommender-tyhw3omfqq-uc.a.run.app/health
+curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/predict \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 123, "recipe_id": 456, "date": "2015-06"}'
+```
+
 GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
