@@ -30,6 +30,7 @@ COPY app/ app/
 
 # Models and data are mounted at runtime via docker-compose volumes.
 ENV MODEL_DIR=/app/models \
+    MODEL_NAME=time_aware_mf \
     RECIPES_CSV=/app/data/dataset/RAW_recipes.csv \
     LOG_LEVEL=info \
     PORT=8080

@@ -24,6 +24,7 @@ mlruns/
 # Git
 .git/
 .gitignore
+.claude/
 
 # Editor
 .DS_Store

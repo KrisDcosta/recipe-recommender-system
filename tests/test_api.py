@@ -30,7 +30,7 @@ _install_st_stub()
 # ── Imports ───────────────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.main import _build_user_rated, _download_gcs_prefix, _parse_gcs_uri  # noqa: E402
+from app.main import LatencyStats, _build_user_rated, _download_gcs_prefix, _parse_gcs_uri  # noqa: E402
 from app.schemas import PredictRequest  # noqa: E402
 from src.embeddings import RecipeEmbedder  # noqa: E402
 
@@ -73,6 +73,7 @@ def client(fake_embedder):
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
 
+    from app.demo import router as demo_router
     from app.routers import predict, recommend, similar
     from app.schemas import HealthResponse
 
@@ -82,16 +83,19 @@ def client(fake_embedder):
     test_app.include_router(predict.router, prefix="/predict", tags=["Prediction"])
     test_app.include_router(recommend.router, prefix="/recommend", tags=["Recommendation"])
     test_app.include_router(similar.router, prefix="/similar", tags=["Similarity"])
+    test_app.include_router(demo_router, tags=["Demo"])
 
     ctx = {
         "model": _FakeModel(),
         "model_name": "fake_model",
         "embedder": fake_embedder,
+        "vector_store": None,
         "id_to_name": {101: "Pasta", 102: "Caesar Salad", 103: "Banana Bread"},
         "all_recipe_ids": [101, 102, 103],
         "user_rated": {1: {101}},
     }
     test_app.state.ctx = ctx
+    test_app.state.latency = LatencyStats()
 
     @test_app.get("/health", response_model=HealthResponse)
     def health():
@@ -100,6 +104,14 @@ def client(fake_embedder):
             loaded.append("embedder")
         return HealthResponse(status="ok", models_loaded=loaded,
                               n_recipes=len(ctx["all_recipe_ids"]))
+
+    @test_app.get("/metrics")
+    def metrics():
+        return {
+            "model": ctx["model_name"],
+            "vector_store": "faiss" if ctx.get("vector_store") else "brute_force",
+            "latency": test_app.state.latency.snapshot(),
+        }
 
     with TestClient(test_app, raise_server_exceptions=True) as c:
         yield c
@@ -122,6 +134,31 @@ class TestHealth:
     def test_n_recipes(self, client):
         r = client.get("/health")
         assert r.json()["n_recipes"] == 3
+
+
+class TestMetrics:
+    def test_metrics_returns_latency_snapshot(self, client):
+        client.get("/health")
+        r = client.get("/metrics")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model"] == "fake_model"
+        assert body["vector_store"] == "brute_force"
+        assert "latency" in body
+
+
+# ── /demo ─────────────────────────────────────────────────────────────────────
+
+class TestDemo:
+    def test_demo_page_serves_html(self, client):
+        r = client.get("/demo")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "Recipe Recommender" in r.text
+
+    def test_demo_calls_recommend_endpoint(self, client):
+        r = client.get("/demo")
+        assert 'fetch("/recommend"' in r.text
 
 
 # ── Startup artifact helpers ─────────────────────────────────────────────────
@@ -306,6 +343,10 @@ class TestSimilar:
         item = r.json()["similar"][0]
         assert "similarity" in item
         assert "name" in item
+
+    def test_search_backend_present(self, client):
+        r = client.post("/similar", json={"recipe_id": 101})
+        assert r.json()["search_backend"] == "brute_force"
 
     def test_unknown_recipe_404(self, client):
         r = client.post("/similar", json={"recipe_id": 999999})

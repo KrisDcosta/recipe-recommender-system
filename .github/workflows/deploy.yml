@@ -52,6 +52,7 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           MODEL_GCS_URI: ${{ vars.MODEL_GCS_URI }}
           RECIPES_GCS_URI: ${{ vars.RECIPES_GCS_URI }}
+          MODEL_NAME: ${{ vars.MODEL_NAME || 'time_aware_mf' }}
         run: |
           gcloud run deploy "${SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
@@ -59,19 +60,34 @@ jobs:
             --image "${IMAGE}" \
             --platform managed \
             --allow-unauthenticated \
-            --memory 2Gi \
+            --memory 4Gi \
             --cpu 1 \
             --min-instances 0 \
             --max-instances 3 \
             --service-account "${RUN_SERVICE_ACCOUNT}" \
-            --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},LOG_LEVEL=info" \
+            --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},MODEL_NAME=${MODEL_NAME},LOG_LEVEL=info" \
             --quiet
 
       - name: Print service URL
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          gcloud run services describe "${SERVICE_NAME}" \
+          SERVICE_URL="$(gcloud run services describe "${SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --format 'value(status.url)'
+            --format 'value(status.url)')"
+          echo "SERVICE_URL=${SERVICE_URL}" >> "${GITHUB_ENV}"
+          echo "${SERVICE_URL}"
+
+      - name: Smoke test deployed service
+        run: |
+          curl --fail --show-error --silent --max-time 120 "${SERVICE_URL}/health"
+          curl --fail --show-error --silent --max-time 120 \
+            -X POST "${SERVICE_URL}/recommend" \
+            -H "Content-Type: application/json" \
+            -d '{"user_id":123,"top_n":2,"exclude_rated":true}'
+          curl --fail --show-error --silent --max-time 120 \
+            -X POST "${SERVICE_URL}/similar" \
+            -H "Content-Type: application/json" \
+            -d '{"recipe_id":456,"top_n":2}'
+          curl --fail --show-error --silent --max-time 120 "${SERVICE_URL}/metrics"

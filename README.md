@@ -6,7 +6,8 @@
 Rating prediction and top-N recommendation on 1.1M Food.com interactions (231K recipes,
 2000–2018). The project has two threads: (1) benchmark integrity — fixing a broken
 evaluation split and verifying zero-rating semantics; (2) model progression from global
-mean → time-aware MF → hybrid MF + LLM content embeddings.
+mean → time-aware MF, with hybrid MF + LLM content embeddings evaluated as an
+experimental extension.
 
 ## Results
 
@@ -24,11 +25,13 @@ rows and splitting with seed 42.
 | Global mean baseline | 0.7251 | - | - |
 | Recipe mean baseline | 0.7677 | - | - |
 | Time-aware MF (SGD, k=5, λ=0.02) | **0.6834** | **0.2252** | **0.3153** |
+| Hybrid MF + LLM embeddings | 0.7039 | 0.2180 | 0.3074 |
 
 The verified CLI run is exported in [`results/phase3_metrics.json`](results/phase3_metrics.json).
 The current production service loads this MF artifact plus the recipe embedder used by
-`/similar`; a committed `hybrid_mf.joblib` rating artifact is not part of the current
-deployment.
+`/similar`. The real full-data hybrid run is exported in
+[`results/hybrid_metrics.json`](results/hybrid_metrics.json), but it is not the
+production default because it underperformed time-aware MF.
 
 ### Data and split
 
@@ -64,8 +67,9 @@ CLI/API/Docker/Cloud Run path.
 - **Rating drift is real**: average rating fell ~0.4 points 2002→2014, partially recovered — time bins capture signal static MF misses.
 - **Time-aware improvement is statistically significant**: bootstrap CI and paired t-test confirm the gap is not sampling noise.
 - **LLM embeddings add semantic content signal**: all-MiniLM-L6-v2 on recipe name + ingredients captures similarity that bag-of-words can miss.
-- **Hybrid architecture targets cold-start**: sparse recipes can use content embeddings when collaborative history is weak or unavailable.
-- **Production path verified**: CLI training writes model artifacts, FastAPI serves predictions, and Docker Compose returns `/health` with the trained model loaded.
+- **FAISS powers scalable semantic search**: `/similar` uses a FAISS IndexFlatIP vector store when available, with a brute-force fallback for local platforms without FAISS wheels.
+- **Hybrid architecture was evaluated honestly**: the implemented hybrid combines TimeAwareMF scores with all-MiniLM-L6-v2 recipe embeddings, but the full run underperformed the simpler time-aware model, so it remains opt-in.
+- **Production path verified locally**: CLI training writes model artifacts, FastAPI serves predictions, `/demo` provides a browser UI, `/metrics` reports latency, and Docker Compose returns `/health` with the trained model loaded.
 
 ## Architecture
 
@@ -82,6 +86,7 @@ Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
 ├── .github/workflows/      # CI and Cloud Run deployment workflows
 ├── app/                    # FastAPI inference service
 │   ├── main.py             # startup model loading, /health
+│   ├── demo.py             # browser demo backed by /recommend
 │   ├── schemas.py          # Pydantic request/response schemas
 │   └── routers/            # /predict, /recommend, /similar
 ├── scripts/                # reproducible training/evaluation CLIs
@@ -104,11 +109,13 @@ Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
 │   ├── test_embeddings.py
 │   └── test_hybrid.py
 ├── results/
-│   └── phase3_metrics.json # committed summary of verified CLI/API/Docker run
+│   ├── phase3_metrics.json # committed summary of verified production model
+│   └── hybrid_metrics.json # evaluated hybrid extension metrics
 ├── docs/
 │   ├── architecture.excalidraw
 │   ├── architecture.png
-│   └── deployment.md       # CI/CD, Cloud Run, and GCS artifact setup
+│   ├── deployment.md       # CI/CD, Cloud Run, and GCS artifact setup
+│   └── monitoring.md       # latency metrics, Cloud Logging, and cost controls
 ├── models/                 # saved model artifacts (not in git)
 ├── data/dataset/           # RAW_recipes.csv + RAW_interactions.csv (not in git)
 ├── Dockerfile
@@ -121,20 +128,17 @@ Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
 ## Setup
 
 ```bash
-# 1. Install base dependencies
+# 1. Install dependencies
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,api,embeddings]"
 
-# 2. (Optional) Install LLM embedding dependencies
-pip install -e ".[embeddings]"
-
-# 3. Download dataset from Kaggle → data/dataset/
+# 2. Download dataset from Kaggle → data/dataset/
 # https://www.kaggle.com/datasets/shuyangli94/food-com-recipes-and-user-interactions
 
-# 4. Run tests (no dataset needed)
+# 3. Run tests (no dataset needed)
 pytest tests/ -v
 
-# 5. Run notebook
+# 4. Run notebook
 jupyter lab assignment2_1.ipynb
 ```
 
@@ -146,14 +150,16 @@ LLM embedding (~2–3 min on CPU, cached after first run).
 Train and evaluate from the command line:
 
 ```bash
-python scripts/train.py --model hybrid --data-dir data/dataset --output-dir models
-python scripts/evaluate.py --model models/hybrid_mf.joblib --data-dir data/dataset --output results/hybrid_eval.json
+python scripts/train.py --model time_aware --data-dir data/dataset --output-dir models
+python scripts/evaluate.py --model models/time_aware_mf.joblib --data-dir data/dataset --output results/time_aware_eval.json
 python scripts/embed_recipes.py --data-dir data/dataset --output models/recipe_embedder.joblib
 ```
 
-The training pipeline writes the MF model artifacts plus `models/user_rated.joblib`,
-which the API uses to exclude recipes already rated by a user. The recipe embedder is
-generated separately and enables `/similar`.
+The training pipeline writes `models/time_aware_mf.joblib` plus
+`models/user_rated.joblib`, which the API uses to exclude recipes already rated by a
+user. The recipe embedder is generated separately and enables `/similar`. Hybrid can be
+trained with `--model hybrid`, but it is not the default deployed model unless
+`MODEL_NAME=hybrid_mf` is set intentionally.
 
 Run the API locally:
 
@@ -169,6 +175,9 @@ curl -X POST http://localhost:8000/recommend \
 curl -X POST http://localhost:8000/similar \
   -H "Content-Type: application/json" \
   -d '{"recipe_id": 456, "top_n": 5}'
+curl http://localhost:8000/metrics
+# Browser demo
+open http://localhost:8000/demo
 ```
 
 Run with Docker Compose after training artifacts exist in `models/`:
@@ -181,7 +190,7 @@ curl http://localhost:8080/health
 Verified Phase 3 serving stack:
 
 ```text
-pytest: 143 passed
+pytest: 151 passed, 2 skipped
 FastAPI /health: 200 OK
 Docker Compose /health: 200 OK
 Loaded model artifacts: time_aware_mf, embedder
@@ -189,11 +198,16 @@ Loaded model artifacts: time_aware_mf, embedder
 
 ## CI/CD and Cloud Run
 
-Live API:
+Expected live API after GitHub Actions deployment:
 
 ```text
 https://recipe-recommender-tyhw3omfqq-uc.a.run.app
 ```
+
+Current status: on April 27, 2026, the deployed revision returns `/health` after warmup,
+but request logs showed the old 2 GiB service exceeding memory under live traffic. The
+workflow now deploys with 4 GiB, and the new `/demo` route will appear after the updated
+code is pushed and deployed.
 
 Smoke test:
 
@@ -222,11 +236,16 @@ Verified `/similar` response:
 GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
-- `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, and deploys to Cloud Run on pushes to `main`.
+- `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, deploys to Cloud Run on pushes to `main`, then smoke-tests `/health`, `/recommend`, `/similar`, and `/metrics`.
+- `cloud-control.yml`: manual `status`, `start`, and `stop` controls for the Cloud Run service. `stop` sets max instances to `0`; `start` restores max instances to `RUN_MAX_INSTANCES` or `3`.
 
 Cloud Run loads both MF and embedder artifacts from GCS at startup when local mounted
 files are absent. `/health` reports `time_aware_mf` and `embedder` when both artifacts
-are available.
+are available. `MODEL_NAME` defaults to `time_aware_mf`; set `MODEL_NAME=hybrid_mf`
+only after hybrid metrics beat the production model. The deploy workflow uses 4 GiB
+memory because the model + embedder footprint can exceed 2 GiB.
+See [`docs/monitoring.md`](docs/monitoring.md) for latency metrics, logging queries,
+recommended alerts, and cost-control operations.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
 variables, GCS artifact layout, and the optional Cloud Build path.
 

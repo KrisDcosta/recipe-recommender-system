@@ -76,10 +76,22 @@ Phase 3 CLI run quantified this directly:
 | Medium, 5-19 training interactions | 45,498 | 0.6426 |
 | Warm, at least 20 training interactions | 47,981 | 0.6688 |
 
-The cold bucket is the hardest case. This is the technical justification for the
-hybrid MF + semantic embedding direction: collaborative filtering is strongest when
-interaction history exists, while recipe text embeddings provide a content signal for
-new or sparse recipes.
+The cold bucket is the hardest case. This is the technical justification for testing
+hybrid MF + semantic embeddings: collaborative filtering is strongest when interaction
+history exists, while recipe text embeddings can provide a content signal for new or
+sparse recipes.
+
+The full-data hybrid experiment was run after the Phase 3 baseline and did not improve
+the system:
+
+| Model | Test RMSE | NDCG@10 | Recall@10 |
+|-------|----------:|--------:|----------:|
+| Time-aware MF | 0.6834 | 0.2252 | 0.3153 |
+| Hybrid MF + LLM embeddings | 0.7039 | 0.2180 | 0.3074 |
+
+Hybrid also had worse cold-start RMSE (`0.7282` for cold items versus `0.7195` for
+time-aware MF). The implemented hybrid remains useful as an experimental artifact and
+future-work direction, but the production service should default to `time_aware_mf`.
 
 ## 5. Offline Experimentation Framework
 
@@ -104,17 +116,23 @@ Phase 3 converted the notebook workflow into a reproducible service layer:
 - CLI training pipeline: `scripts/train.py`.
 - CLI evaluation pipeline: `scripts/evaluate.py`.
 - Standalone recipe embedding cache: `scripts/embed_recipes.py`.
-- FastAPI inference service with `/health`, `/predict`, `/recommend`, and `/similar`.
+- FastAPI inference service with `/health`, `/predict`, `/recommend`, `/similar`, `/metrics`, and `/demo`.
+- Optional FAISS vector store for `/similar`, with brute-force fallback when FAISS is unavailable.
 - Docker Compose service that mounts trained model artifacts.
 - API tests with mocked models so CI does not need large artifacts.
 
-Verified locally on April 25, 2026:
+Verified locally on April 27, 2026:
 
-- `python -m pytest -q`: 143 tests passed.
+- `.venv/bin/python -m pytest tests/ -q`: 147 tests passed.
 - `python scripts/train.py --model time_aware`: produced `models/time_aware_mf.joblib`
   and `models/user_rated.joblib`.
+- `.venv/bin/python scripts/train.py --model hybrid`: produced `models/hybrid_mf.joblib`
+  and `results/hybrid_metrics.json`, but metrics were worse than time-aware MF.
 - FastAPI `/health`: HTTP 200 with `time_aware_mf` loaded.
 - Docker Compose `/health`: HTTP 200 with `time_aware_mf` loaded.
 
-The current service is a local/containerized ML inference API. It is not yet claiming
-cloud deployment; that belongs to the next CI/CD and Cloud Run phase.
+The current service is a local/containerized ML inference API with a GitHub Actions
+Cloud Run deploy path. The deployed Cloud Run revision returned `/health` after warmup
+on April 27, 2026, but logs showed the old 2 GiB configuration exceeding memory during
+live `/recommend` and `/similar` traffic. The deploy config now uses 4 GiB; push and
+rerun the workflow before treating the public endpoint as fully production-ready.

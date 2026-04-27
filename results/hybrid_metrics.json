@@ -1,0 +1,22 @@
+[
+  {
+    "model": "hybrid_mf",
+    "test_rmse": 0.7039,
+    "ndcg@10": 0.218,
+    "recall@10": 0.3074,
+    "cold_start": {
+      "cold (<5 interactions)": {
+        "rmse": 0.7282,
+        "n": 67249
+      },
+      "medium (5\u201319 interactions)": {
+        "rmse": 0.67,
+        "n": 45498
+      },
+      "warm (\u226520 interactions)": {
+        "rmse": 0.7005,
+        "n": 47981
+      }
+    }
+  }
+]

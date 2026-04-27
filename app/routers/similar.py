@@ -17,6 +17,7 @@ def similar_recipes(body: SimilarRequest, request: Request) -> SimilarResponse:
     """
     ctx = request.app.state.ctx
     embedder = ctx.get("embedder")
+    vector_store = ctx.get("vector_store")
     id_to_name: dict = ctx["id_to_name"]
 
     if embedder is None:
@@ -31,10 +32,16 @@ def similar_recipes(body: SimilarRequest, request: Request) -> SimilarResponse:
             detail=f"recipe_id {body.recipe_id} not found in embedding index.",
         )
 
-    neighbours = embedder.most_similar(body.recipe_id, n=body.top_n)
+    if vector_store is not None:
+        neighbours = vector_store.most_similar(body.recipe_id, n=body.top_n)
+        search_backend = "faiss"
+    else:
+        neighbours = embedder.most_similar(body.recipe_id, n=body.top_n)
+        search_backend = "brute_force"
 
     return SimilarResponse(
         seed_recipe_id=body.recipe_id,
+        search_backend=search_backend,
         similar=[
             SimilarRecipe(
                 recipe_id=rid,

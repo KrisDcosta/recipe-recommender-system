@@ -11,6 +11,7 @@ services:
       - ./data:/app/data:ro
     environment:
       MODEL_DIR: /app/models
+      MODEL_NAME: time_aware_mf
       RECIPES_CSV: /app/data/dataset/RAW_recipes.csv
       LOG_LEVEL: info
       PORT: 8080

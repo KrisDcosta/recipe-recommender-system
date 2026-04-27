@@ -100,6 +100,7 @@ class SimilarRecipe(BaseModel):
 
 class SimilarResponse(BaseModel):
     seed_recipe_id: int
+    search_backend: str = Field(..., description="Vector search backend: faiss or brute_force")
     similar: list[SimilarRecipe]
 
 

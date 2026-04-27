@@ -1,0 +1,70 @@
+name: Cloud Run Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "start, stop, or status"
+        required: true
+        type: choice
+        options:
+          - status
+          - start
+          - stop
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SERVICE_NAME: recipe-recommender
+  GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  START_MAX_INSTANCES: ${{ vars.RUN_MAX_INSTANCES || '3' }}
+
+jobs:
+  control:
+    name: ${{ inputs.action }} Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Stop service
+        if: inputs.action == 'stop'
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services update "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --min-instances 0 \
+            --max-instances 0 \
+            --quiet
+
+      - name: Start service
+        if: inputs.action == 'start'
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services update "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --min-instances 0 \
+            --max-instances "${START_MAX_INSTANCES}" \
+            --quiet
+
+      - name: Print service status
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services describe "${SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='yaml(status.url,status.conditions,status.traffic,spec.template.spec.containers[0].resources,spec.template.metadata.annotations)'

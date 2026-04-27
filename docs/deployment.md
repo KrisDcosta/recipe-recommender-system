@@ -23,7 +23,8 @@ Deployment flow:
 4. Deploy the image to Cloud Run.
 5. Cloud Run starts the FastAPI app.
 6. At startup, the app downloads model/data artifacts from GCS if local files are absent.
-7. `/health`, `/predict`, `/recommend`, and `/similar` serve from loaded artifacts.
+7. `/health`, `/predict`, `/recommend`, `/similar`, `/metrics`, and `/demo` serve from loaded artifacts.
+8. The workflow smoke-tests `/health`, `/recommend`, `/similar`, and `/metrics` after deployment and fails if Cloud Run is not reachable.
 
 Required GitHub Actions secrets:
 
@@ -41,6 +42,7 @@ Required GitHub Actions variables:
 | `GAR_REPOSITORY` | `recipe-recommender` | Artifact Registry Docker repository |
 | `RUN_SERVICE_ACCOUNT` | `recipe-recommender-run@PROJECT_ID.iam.gserviceaccount.com` | Runtime identity used by Cloud Run to read GCS artifacts |
 | `MODEL_GCS_URI` | `gs://recipe-recommender-models/models` | Prefix containing `.joblib` artifacts |
+| `MODEL_NAME` | `time_aware_mf` | Rating model loaded by the API; defaults to the verified production model |
 | `RECIPES_GCS_URI` | `gs://recipe-recommender-models/data/RAW_recipes.csv` | Recipe metadata CSV |
 
 Required GCS artifacts:
@@ -52,8 +54,15 @@ gs://.../models/recipe_embedder.joblib    # enables /similar
 gs://.../data/RAW_recipes.csv
 ```
 
-The verified Cloud Run deployment loads both `time_aware_mf` and `embedder` at
-startup; `/health` reports both artifacts when they are available.
+The API defaults to `MODEL_NAME=time_aware_mf` because that is the verified best
+full-data model. `hybrid_mf.joblib` can be uploaded and loaded with
+`MODEL_NAME=hybrid_mf`, but the April 27, 2026 full-data run underperformed
+time-aware MF and should not be the production default.
+
+Cloud Run needs enough memory for the MF model, the 353 MB recipe embedder, and the
+recipe lookup table at the same time. The deploy workflow uses `--memory 4Gi`; the
+previous 2 GiB service exceeded its memory limit under live requests on April 27, 2026.
+When deployment is healthy, `/health` reports both `time_aware_mf` and `embedder`.
 
 The Cloud Run service account needs read access to the GCS bucket. The deploy service
 account needs permissions to push to Artifact Registry and deploy Cloud Run services.
@@ -66,4 +75,28 @@ account needs permissions to push to Artifact Registry and deploy Cloud Run serv
 gcloud builds submit \
   --config cloudbuild.yaml \
   --substitutions _REGION=us-central1,_MODEL_GCS_URI=gs://YOUR_BUCKET/models,_RECIPES_GCS_URI=gs://YOUR_BUCKET/data/RAW_recipes.csv
+```
+
+## Start, Stop, and Status
+
+Use the `Cloud Run Control` GitHub Actions workflow for manual operations:
+
+- `status`: prints service URL, traffic split, revision status, memory, and autoscaling annotations.
+- `stop`: sets `min-instances=0` and `max-instances=0`.
+- `start`: sets `min-instances=0` and `max-instances` back to `RUN_MAX_INSTANCES` or `3`.
+
+The equivalent local commands are:
+
+```bash
+gcloud run services update recipe-recommender \
+  --project PROJECT_ID \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 0
+
+gcloud run services update recipe-recommender \
+  --project PROJECT_ID \
+  --region us-central1 \
+  --min-instances 0 \
+  --max-instances 3
 ```

@@ -225,9 +225,10 @@ models/
 
 # Generated figures and results
 figures/
-results/
+results/*
 !results/
 !results/phase3_metrics.json
+!results/hybrid_metrics.json
 
 # MLflow tracking
 mlruns/
@@ -238,3 +239,7 @@ mlflow.db
 
 # macOS
 .DS_Store
+
+# Agent scratch work and generated exports
+.claude/
+*.pdf
