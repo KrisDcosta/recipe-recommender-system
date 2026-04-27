@@ -48,14 +48,30 @@ class FaissVectorStore:
         if pos is None:
             return []
         query = self._reconstruct(pos).reshape(1, -1)
-        scores, idx = self.index.search(query, n + 1)
+        return self.search_vector(query[0], n=n, exclude_ids={recipe_id})
+
+    def search_vector(
+        self,
+        query: np.ndarray,
+        n: int = 10,
+        exclude_ids: set[Any] | None = None,
+    ) -> list[tuple[Any, float]]:
+        """Return top-n recipe ids and scores for an arbitrary normalized query vector."""
+        exclude_ids = exclude_ids or set()
+        query = np.asarray(query, dtype=np.float32)
+        norm = np.linalg.norm(query)
+        if norm <= 0:
+            return []
+        query = (query / norm).reshape(1, -1)
+        search_k = min(len(self.recipe_ids), n + len(exclude_ids) + 50)
+        scores, idx = self.index.search(query, search_k)
 
         out: list[tuple[Any, float]] = []
         for score, i in zip(scores[0], idx[0]):
             if i < 0:
                 continue
             rid = self.recipe_ids[int(i)]
-            if rid == recipe_id:
+            if rid in exclude_ids:
                 continue
             out.append((rid, float(score)))
             if len(out) >= n:

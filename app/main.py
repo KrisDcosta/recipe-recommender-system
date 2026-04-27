@@ -17,6 +17,7 @@ import logging
 import math
 import os
 import time
+from ast import literal_eval
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,12 +27,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from app.routers import predict, recommend, similar
+from app.routers import explain, predict, recommend, similar
 from app.demo import router as demo_router
 from app.schemas import HealthResponse
 from src.vector_store import build_faiss_store_if_available
 
 logger = logging.getLogger("app")
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "models"))
 RECIPES_CSV = Path(os.getenv("RECIPES_CSV", "data/dataset/RAW_recipes.csv"))
@@ -166,6 +174,38 @@ def _build_user_rated(interactions: pd.DataFrame) -> dict:
     return user_rated
 
 
+def _recipe_metadata(row: pd.Series) -> dict:
+    """Return compact metadata used by demo filters and explanation prompts."""
+    ingredients = row.get("ingredients", "")
+    if isinstance(ingredients, str):
+        try:
+            parsed = literal_eval(ingredients)
+            if isinstance(parsed, list):
+                ingredients_text = ", ".join(str(x) for x in parsed)
+            else:
+                ingredients_text = ingredients
+        except (SyntaxError, ValueError):
+            ingredients_text = ingredients
+    elif isinstance(ingredients, list):
+        ingredients_text = ", ".join(str(x) for x in ingredients)
+    else:
+        ingredients_text = ""
+
+    minutes = row.get("minutes")
+    try:
+        minutes_value = int(minutes) if not pd.isna(minutes) else None
+    except (TypeError, ValueError):
+        minutes_value = None
+
+    name = str(row.get("name", ""))
+    return {
+        "name": name,
+        "minutes": minutes_value,
+        "ingredients": ingredients_text,
+        "search_text": f"{name} {ingredients_text}".lower(),
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load model artifacts once at startup; release on shutdown."""
@@ -226,12 +266,17 @@ async def lifespan(app: FastAPI):
     # ── Recipe lookup table ───────────────────────────────────────────────
     if RECIPES_CSV.exists():
         logger.info("Loading recipe names from %s", RECIPES_CSV)
-        recipes = pd.read_csv(RECIPES_CSV, usecols=["id", "name"])
+        recipes = pd.read_csv(RECIPES_CSV, usecols=["id", "name", "minutes", "ingredients"])
         state["id_to_name"] = recipes.set_index("id")["name"].to_dict()
+        state["id_to_meta"] = {
+            int(row["id"]): _recipe_metadata(row)
+            for _, row in recipes.iterrows()
+        }
         state["all_recipe_ids"] = list(state["id_to_name"].keys())
     else:
         logger.warning("RAW_recipes.csv not found — recipe names unavailable")
         state["id_to_name"] = {}
+        state["id_to_meta"] = {}
         state["all_recipe_ids"] = []
 
     # ── Rated items per user (from training set) ───────────────────────────
@@ -289,6 +334,7 @@ app.add_middleware(LatencyMiddleware)
 app.include_router(predict.router, prefix="/predict", tags=["Prediction"])
 app.include_router(recommend.router, prefix="/recommend", tags=["Recommendation"])
 app.include_router(similar.router, prefix="/similar", tags=["Similarity"])
+app.include_router(explain.router, prefix="/explain", tags=["Explanation"])
 app.include_router(demo_router, tags=["Demo"])
 
 

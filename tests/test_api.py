@@ -74,7 +74,7 @@ def client(fake_embedder):
     from fastapi.middleware.cors import CORSMiddleware
 
     from app.demo import router as demo_router
-    from app.routers import predict, recommend, similar
+    from app.routers import explain, predict, recommend, similar
     from app.schemas import HealthResponse
 
     test_app = FastAPI()
@@ -83,6 +83,7 @@ def client(fake_embedder):
     test_app.include_router(predict.router, prefix="/predict", tags=["Prediction"])
     test_app.include_router(recommend.router, prefix="/recommend", tags=["Recommendation"])
     test_app.include_router(similar.router, prefix="/similar", tags=["Similarity"])
+    test_app.include_router(explain.router, prefix="/explain", tags=["Explanation"])
     test_app.include_router(demo_router, tags=["Demo"])
 
     ctx = {
@@ -91,6 +92,26 @@ def client(fake_embedder):
         "embedder": fake_embedder,
         "vector_store": None,
         "id_to_name": {101: "Pasta", 102: "Caesar Salad", 103: "Banana Bread"},
+        "id_to_meta": {
+            101: {
+                "name": "Pasta",
+                "minutes": 30,
+                "ingredients": "pasta",
+                "search_text": "pasta pasta",
+            },
+            102: {
+                "name": "Caesar Salad",
+                "minutes": 15,
+                "ingredients": "lettuce",
+                "search_text": "caesar salad lettuce",
+            },
+            103: {
+                "name": "Banana Bread",
+                "minutes": 60,
+                "ingredients": "flour",
+                "search_text": "banana bread flour",
+            },
+        },
         "all_recipe_ids": [101, 102, 103],
         "user_rated": {1: {101}},
     }
@@ -159,6 +180,11 @@ class TestDemo:
     def test_demo_calls_recommend_endpoint(self, client):
         r = client.get("/demo")
         assert 'fetch("/recommend"' in r.text
+
+    def test_demo_calls_new_user_and_explain_endpoints(self, client):
+        r = client.get("/demo")
+        assert 'fetch("/recommend/new-user"' in r.text
+        assert 'fetch("/explain"' in r.text
 
 
 # ── Startup artifact helpers ─────────────────────────────────────────────────
@@ -316,6 +342,123 @@ class TestRecommend:
         })
 
         assert _build_user_rated(interactions) == {1: {101, 102}, 2: {103}}
+
+
+class TestNewUserRecommend:
+    def test_liked_recipe_returns_cold_start_recs(self, client):
+        r = client.post("/recommend/new-user", json={"liked_recipe_ids": [101], "top_n": 2})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["search_backend"] == "brute_force"
+        assert body["recommendations"]
+        assert body["recommendations"][0]["source"] == "semantic_cold_start"
+
+    def test_excludes_liked_and_disliked_recipes(self, client):
+        r = client.post(
+            "/recommend/new-user",
+            json={"liked_recipe_ids": [101], "disliked_recipe_ids": [102], "top_n": 3},
+        )
+        ids = [rec["recipe_id"] for rec in r.json()["recommendations"]]
+        assert 101 not in ids
+        assert 102 not in ids
+
+    def test_requires_signal(self, client):
+        r = client.post("/recommend/new-user", json={"top_n": 2})
+        assert r.status_code == 422
+
+    def test_metadata_fallback_with_ingredient_preference(self, client):
+        r = client.post(
+            "/recommend/new-user",
+            json={"preferences": {"ingredients": ["lettuce"]}, "top_n": 2},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["search_backend"] == "metadata"
+        assert [rec["recipe_id"] for rec in body["recommendations"]] == [102]
+
+    def test_unknown_liked_recipe_404(self, client):
+        r = client.post("/recommend/new-user", json={"liked_recipe_ids": [999_999]})
+        assert r.status_code == 404
+
+
+class TestExplain:
+    def test_known_user_explain_falls_back_without_api_key(self, client, monkeypatch):
+        monkeypatch.setenv("ENABLE_LLM_EXPLANATIONS", "false")
+        r = client.post("/explain", json={"user_id": 1, "top_n": 2})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["fallback"] is True
+        assert body["provider"] == "rule_based"
+        assert len(body["explanations"]) == 2
+
+    def test_new_user_explain_payload(self, client, monkeypatch):
+        monkeypatch.delenv("XAI_API_KEY", raising=False)
+        r = client.post(
+            "/explain",
+            json={
+                "liked_recipe_ids": [101],
+                "disliked_recipe_ids": [102],
+                "recommendations": [{"recipe_id": 103, "name": "Banana Bread", "score": 0.8}],
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["explanations"][0]["recipe_id"] == 103
+        assert "close to the recipe examples" in body["explanations"][0]["explanation"]
+
+    def test_explain_requires_context(self, client):
+        r = client.post("/explain", json={})
+        assert r.status_code == 422
+
+    def test_explain_uses_llm_when_configured(self, client, monkeypatch):
+        from app.routers import explain as explain_router
+
+        class _FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    '[{"recipe_id":103,'
+                                    '"explanation":"This matches your onboarding taste."}]'
+                                )
+                            }
+                        }
+                    ]
+                }
+
+        calls = {}
+
+        def fake_post(url, headers, json, timeout):
+            calls["url"] = url
+            calls["model"] = json["model"]
+            calls["auth"] = headers["Authorization"]
+            return _FakeResponse()
+
+        monkeypatch.setenv("ENABLE_LLM_EXPLANATIONS", "true")
+        monkeypatch.setenv("XAI_API_KEY", "test-key")
+        monkeypatch.setenv("LLM_MODEL", "test-model")
+        monkeypatch.setenv("LLM_BASE_URL", "https://api.x.ai/v1")
+        monkeypatch.setattr(explain_router.httpx, "post", fake_post)
+
+        r = client.post(
+            "/explain",
+            json={
+                "recommendations": [{"recipe_id": 103, "name": "Banana Bread", "score": 0.8}],
+            },
+        )
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["fallback"] is False
+        assert body["model"] == "test-model"
+        assert body["explanations"][0]["explanation"] == "This matches your onboarding taste."
+        assert calls["url"] == "https://api.x.ai/v1/chat/completions"
+        assert calls["auth"] == "Bearer test-key"
 
 
 # ── /similar ──────────────────────────────────────────────────────────────────

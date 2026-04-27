@@ -78,6 +78,17 @@ def demo() -> str:
       font-weight: 700;
       cursor: pointer;
     }
+    button.secondary {
+      background: #e7eee8;
+      color: var(--accent-dark);
+      border: 1px solid var(--line);
+    }
+    button.secondary:hover { background: #dce7df; }
+    .panel {
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+    }
     button:hover { background: var(--accent-dark); }
     #status { min-height: 22px; margin-bottom: 14px; color: var(--muted); }
     .grid {
@@ -103,6 +114,8 @@ def demo() -> str:
       color: var(--muted);
       font-size: 13px;
     }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .explanation { color: var(--muted); font-size: 13px; line-height: 1.45; }
     @media (max-width: 640px) {
       header { display: block; }
       form { grid-template-columns: 1fr; }
@@ -120,15 +133,27 @@ def demo() -> str:
       <p><a href="/docs">API docs</a></p>
     </header>
 
-    <form id="recommend-form">
-      <label>User ID
-        <input id="user-id" name="user_id" type="number" min="0" step="1" value="123" required>
-      </label>
-      <label>Count
-        <input id="top-n" name="top_n" type="number" min="1" max="20" step="1" value="10" required>
-      </label>
-      <button type="submit">Recommend</button>
-    </form>
+    <section class="panel">
+      <form id="recommend-form">
+        <label>User ID
+          <input id="user-id" name="user_id" type="number" min="0" step="1" value="123" required>
+        </label>
+        <label>Count
+          <input id="top-n" name="top_n" type="number" min="1" max="20" step="1" value="10" required>
+        </label>
+        <button type="submit">Recommend</button>
+      </form>
+
+      <form id="new-user-form">
+        <label>Liked recipe IDs
+          <input id="liked-ids" value="456" placeholder="456, 101, 202">
+        </label>
+        <label>Disliked IDs
+          <input id="disliked-ids" placeholder="303, 404">
+        </label>
+        <button type="submit">New user recs</button>
+      </form>
+    </section>
 
     <div id="status"></div>
     <section id="results" class="grid" aria-live="polite"></section>
@@ -139,6 +164,13 @@ def demo() -> str:
     const statusEl = document.querySelector("#status");
     const resultsEl = document.querySelector("#results");
 
+    let lastMode = "known";
+    let lastUserId = 123;
+
+    function parseIds(value) {
+      return value.split(",").map((x) => Number(x.trim())).filter((x) => Number.isFinite(x));
+    }
+
     function renderRecommendations(items, model) {
       resultsEl.innerHTML = "";
       for (const item of items) {
@@ -147,11 +179,46 @@ def demo() -> str:
         title.textContent = item.name;
         const meta = document.createElement("div");
         meta.className = "meta";
-        meta.innerHTML = `<span>ID ${item.recipe_id}</span><strong>${item.predicted_rating.toFixed(2)}</strong>`;
-        card.append(title, meta);
+        const score = item.predicted_rating ?? item.score;
+        meta.innerHTML = `<span>ID ${item.recipe_id}</span><strong>${Number(score).toFixed(2)}</strong>`;
+        const explanation = document.createElement("p");
+        explanation.className = "explanation";
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const why = document.createElement("button");
+        why.className = "secondary";
+        why.type = "button";
+        why.textContent = "Why this?";
+        why.addEventListener("click", () => explainCard(item, explanation));
+        actions.append(why);
+        card.append(title, meta, explanation, actions);
         resultsEl.append(card);
       }
       statusEl.textContent = `${items.length} recommendations from ${model}`;
+    }
+
+    async function explainCard(item, target) {
+      target.textContent = "Generating explanation...";
+      const payload = lastMode === "known"
+        ? { user_id: lastUserId, recommendations: [item], top_n: 1 }
+        : {
+            liked_recipe_ids: parseIds(document.querySelector("#liked-ids").value),
+            disliked_recipe_ids: parseIds(document.querySelector("#disliked-ids").value),
+            recommendations: [item],
+            top_n: 1
+          };
+      try {
+        const response = await fetch("/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+        target.textContent = body.explanations[0]?.explanation || "No explanation returned.";
+      } catch (error) {
+        target.textContent = `Explanation failed: ${error.message}`;
+      }
     }
 
     form.addEventListener("submit", async (event) => {
@@ -163,6 +230,8 @@ def demo() -> str:
         top_n: Number(document.querySelector("#top-n").value),
         exclude_rated: true
       };
+      lastMode = "known";
+      lastUserId = payload.user_id;
       try {
         const response = await fetch("/recommend", {
           method: "POST",
@@ -174,6 +243,32 @@ def demo() -> str:
           throw new Error(body.detail || `HTTP ${response.status}`);
         }
         renderRecommendations(body.recommendations, body.model);
+      } catch (error) {
+        statusEl.textContent = `Request failed: ${error.message}`;
+      }
+    });
+
+    document.querySelector("#new-user-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      statusEl.textContent = "Loading cold-start recommendations...";
+      resultsEl.innerHTML = "";
+      lastMode = "new";
+      const payload = {
+        liked_recipe_ids: parseIds(document.querySelector("#liked-ids").value),
+        disliked_recipe_ids: parseIds(document.querySelector("#disliked-ids").value),
+        top_n: Number(document.querySelector("#top-n").value)
+      };
+      try {
+        const response = await fetch("/recommend/new-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          throw new Error(body.detail || `HTTP ${response.status}`);
+        }
+        renderRecommendations(body.recommendations, body.search_backend);
       } catch (error) {
         statusEl.textContent = `Request failed: ${error.message}`;
       }

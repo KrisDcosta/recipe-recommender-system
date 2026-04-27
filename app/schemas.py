@@ -83,6 +83,38 @@ class RecommendResponse(BaseModel):
     model: str
 
 
+class NewUserPreferences(BaseModel):
+    ingredients: list[str] = Field(default_factory=list, description="Ingredients or terms to prefer")
+    avoid: list[str] = Field(default_factory=list, description="Ingredients or terms to avoid")
+    max_minutes: Optional[int] = Field(None, ge=1, le=1440, description="Optional maximum cook time")
+
+
+class NewUserRecommendRequest(BaseModel):
+    liked_recipe_ids: list[int] = Field(default_factory=list, description="Recipes the new user liked")
+    disliked_recipe_ids: list[int] = Field(default_factory=list, description="Recipes the new user disliked")
+    preferences: NewUserPreferences = Field(default_factory=NewUserPreferences)
+    top_n: int = Field(10, ge=1, le=100, description="Number of recommendations")
+
+    @model_validator(mode="after")
+    def has_signal(self) -> "NewUserRecommendRequest":
+        if not self.liked_recipe_ids and not self.preferences.ingredients:
+            raise ValueError("Provide at least one liked_recipe_id or preferred ingredient")
+        return self
+
+
+class NewUserRecipeScore(BaseModel):
+    recipe_id: int
+    name: str
+    score: float
+    source: str
+
+
+class NewUserRecommendResponse(BaseModel):
+    recommendations: list[NewUserRecipeScore]
+    search_backend: str
+    source: str = "semantic_cold_start"
+
+
 # ---------------------------------------------------------------------------
 # /similar
 # ---------------------------------------------------------------------------
@@ -102,6 +134,44 @@ class SimilarResponse(BaseModel):
     seed_recipe_id: int
     search_backend: str = Field(..., description="Vector search backend: faiss or brute_force")
     similar: list[SimilarRecipe]
+
+
+# ---------------------------------------------------------------------------
+# /explain
+# ---------------------------------------------------------------------------
+
+class ExplainRecommendation(BaseModel):
+    recipe_id: int
+    name: str
+    score: Optional[float] = None
+    predicted_rating: Optional[float] = None
+
+
+class ExplainRequest(BaseModel):
+    user_id: Optional[int] = Field(None, description="Known user ID for collaborative recommendations")
+    liked_recipe_ids: list[int] = Field(default_factory=list)
+    disliked_recipe_ids: list[int] = Field(default_factory=list)
+    recommendations: list[ExplainRecommendation] = Field(default_factory=list)
+    top_n: int = Field(5, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def has_context(self) -> "ExplainRequest":
+        if self.user_id is None and not self.recommendations:
+            raise ValueError("Provide user_id or recommendations to explain")
+        return self
+
+
+class RecipeExplanation(BaseModel):
+    recipe_id: int
+    name: str
+    explanation: str
+
+
+class ExplainResponse(BaseModel):
+    explanations: list[RecipeExplanation]
+    provider: str
+    model: str
+    fallback: bool
 
 
 # ---------------------------------------------------------------------------
