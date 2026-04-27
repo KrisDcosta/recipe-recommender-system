@@ -23,8 +23,8 @@ Deployment flow:
 4. Deploy the image to Cloud Run.
 5. Cloud Run starts the FastAPI app.
 6. At startup, the app downloads model/data artifacts from GCS if local files are absent.
-7. `/health`, `/predict`, `/recommend`, `/similar`, `/metrics`, and `/demo` serve from loaded artifacts.
-8. The workflow smoke-tests `/health`, `/recommend`, `/similar`, and `/metrics` after deployment and fails if Cloud Run is not reachable.
+7. `/health`, `/predict`, `/recommend`, `/recommend/new-user`, `/similar`, `/explain`, `/metrics`, and `/demo` serve from loaded artifacts.
+8. The workflow smoke-tests `/health`, `/recommend`, `/recommend/new-user`, `/similar`, and `/metrics` after deployment and fails if Cloud Run is not reachable.
 
 Required GitHub Actions secrets:
 
@@ -44,6 +44,10 @@ Required GitHub Actions variables:
 | `MODEL_GCS_URI` | `gs://recipe-recommender-models/models` | Prefix containing `.joblib` artifacts |
 | `MODEL_NAME` | `time_aware_mf` | Rating model loaded by the API; defaults to the verified production model |
 | `RECIPES_GCS_URI` | `gs://recipe-recommender-models/data/RAW_recipes.csv` | Recipe metadata CSV |
+| `ENABLE_LLM_EXPLANATIONS` | `false` | Set `true` to call the configured LLM provider |
+| `LLM_PROVIDER` | `xai` | Provider label returned by `/explain` |
+| `LLM_BASE_URL` | `https://api.x.ai/v1` | OpenAI-compatible chat completions base URL |
+| `LLM_MODEL` | `grok-3-mini` | Model used by `/explain` when enabled |
 
 Required GCS artifacts:
 
@@ -66,6 +70,10 @@ When deployment is healthy, `/health` reports both `time_aware_mf` and `embedder
 
 The Cloud Run service account needs read access to the GCS bucket. The deploy service
 account needs permissions to push to Artifact Registry and deploy Cloud Run services.
+If LLM explanations are enabled, store `XAI_API_KEY` in Google Secret Manager and grant
+the Cloud Run runtime service account `roles/secretmanager.secretAccessor`. The deploy
+workflow mounts it with `--set-secrets` instead of passing the key through GitHub
+Actions environment variables.
 
 ## Alternative: Cloud Build
 

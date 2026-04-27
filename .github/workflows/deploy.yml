@@ -53,6 +53,10 @@ jobs:
           MODEL_GCS_URI: ${{ vars.MODEL_GCS_URI }}
           RECIPES_GCS_URI: ${{ vars.RECIPES_GCS_URI }}
           MODEL_NAME: ${{ vars.MODEL_NAME || 'time_aware_mf' }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'xai' }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://api.x.ai/v1' }}
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'grok-3-mini' }}
+          ENABLE_LLM_EXPLANATIONS: ${{ vars.ENABLE_LLM_EXPLANATIONS || 'false' }}
         run: |
           gcloud run deploy "${SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
@@ -65,7 +69,8 @@ jobs:
             --min-instances 0 \
             --max-instances 3 \
             --service-account "${RUN_SERVICE_ACCOUNT}" \
-            --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},MODEL_NAME=${MODEL_NAME},LOG_LEVEL=info" \
+            --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},MODEL_NAME=${MODEL_NAME},LOG_LEVEL=info,LLM_PROVIDER=${LLM_PROVIDER},LLM_BASE_URL=${LLM_BASE_URL},LLM_MODEL=${LLM_MODEL},ENABLE_LLM_EXPLANATIONS=${ENABLE_LLM_EXPLANATIONS}" \
+            --set-secrets "XAI_API_KEY=XAI_API_KEY:latest" \
             --quiet
 
       - name: Print service URL
@@ -90,4 +95,8 @@ jobs:
             -X POST "${SERVICE_URL}/similar" \
             -H "Content-Type: application/json" \
             -d '{"recipe_id":456,"top_n":2}'
+          curl --fail --show-error --silent --max-time 120 \
+            -X POST "${SERVICE_URL}/recommend/new-user" \
+            -H "Content-Type: application/json" \
+            -d '{"liked_recipe_ids":[456],"disliked_recipe_ids":[],"top_n":2}'
           curl --fail --show-error --silent --max-time 120 "${SERVICE_URL}/metrics"

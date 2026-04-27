@@ -175,6 +175,12 @@ curl -X POST http://localhost:8000/recommend \
 curl -X POST http://localhost:8000/similar \
   -H "Content-Type: application/json" \
   -d '{"recipe_id": 456, "top_n": 5}'
+curl -X POST http://localhost:8000/recommend/new-user \
+  -H "Content-Type: application/json" \
+  -d '{"liked_recipe_ids": [456], "disliked_recipe_ids": [], "top_n": 5}'
+curl -X POST http://localhost:8000/explain \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 123, "top_n": 2}'
 curl http://localhost:8000/metrics
 # Browser demo
 open http://localhost:8000/demo
@@ -190,7 +196,7 @@ curl http://localhost:8080/health
 Verified Phase 3 serving stack:
 
 ```text
-pytest: 151 passed, 2 skipped
+pytest: 161 passed, 2 skipped
 FastAPI /health: 200 OK
 Docker Compose /health: 200 OK
 Loaded model artifacts: time_aware_mf, embedder
@@ -204,9 +210,9 @@ Live API:
 https://recipe-recommender-tyhw3omfqq-uc.a.run.app
 ```
 
-Current status: on April 27, 2026, GitHub Actions deployed the 4 GiB Cloud Run revision
-and smoke-tested `/health`, `/recommend`, `/similar`, and `/metrics` successfully. The
-browser demo is available at
+Current status: on April 27, 2026, GitHub Actions deployed the 4 GiB Cloud Run revision.
+The workflow smoke-tests `/health`, `/recommend`, `/recommend/new-user`, `/similar`,
+and `/metrics`. The browser demo is available at
 [`/demo`](https://recipe-recommender-tyhw3omfqq-uc.a.run.app/demo).
 
 Smoke test:
@@ -219,6 +225,12 @@ curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/predict \
 curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/similar \
   -H "Content-Type: application/json" \
   -d '{"recipe_id": 456, "top_n": 2}'
+curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/recommend/new-user \
+  -H "Content-Type: application/json" \
+  -d '{"liked_recipe_ids": [456], "top_n": 2}'
+curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/explain \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 123, "top_n": 2}'
 curl https://recipe-recommender-tyhw3omfqq-uc.a.run.app/metrics
 ```
 
@@ -238,7 +250,7 @@ Verified `/similar` response:
 GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
-- `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, deploys to Cloud Run on pushes to `main`, then smoke-tests `/health`, `/recommend`, `/similar`, and `/metrics`.
+- `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, deploys to Cloud Run on pushes to `main`, then smoke-tests `/health`, `/recommend`, `/recommend/new-user`, `/similar`, and `/metrics`.
 - `cloud-control.yml`: manual `status`, `start`, and `stop` controls for the Cloud Run service. `stop` sets max instances to `0`; `start` restores max instances to `RUN_MAX_INSTANCES` or `3`.
 
 Cloud Run loads both MF and embedder artifacts from GCS at startup when local mounted
@@ -246,6 +258,9 @@ files are absent. `/health` reports `time_aware_mf` and `embedder` when both art
 are available. `MODEL_NAME` defaults to `time_aware_mf`; set `MODEL_NAME=hybrid_mf`
 only after hybrid metrics beat the production model. The deploy workflow uses 4 GiB
 memory because the model + embedder footprint can exceed 2 GiB.
+LLM explanations are optional. If `ENABLE_LLM_EXPLANATIONS=true` and `XAI_API_KEY` is
+available, `/explain` calls the configured xAI-compatible chat endpoint; otherwise it
+returns deterministic rule-based explanations.
 See [`docs/monitoring.md`](docs/monitoring.md) for latency metrics, logging queries,
 recommended alerts, and cost-control operations.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
