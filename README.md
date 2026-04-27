@@ -198,16 +198,16 @@ Loaded model artifacts: time_aware_mf, embedder
 
 ## CI/CD and Cloud Run
 
-Expected live API after GitHub Actions deployment:
+Live API:
 
 ```text
 https://recipe-recommender-tyhw3omfqq-uc.a.run.app
 ```
 
-Current status: on April 27, 2026, the deployed revision returns `/health` after warmup,
-but request logs showed the old 2 GiB service exceeding memory under live traffic. The
-workflow now deploys with 4 GiB, and the new `/demo` route will appear after the updated
-code is pushed and deployed.
+Current status: on April 27, 2026, GitHub Actions deployed the 4 GiB Cloud Run revision
+and smoke-tested `/health`, `/recommend`, `/similar`, and `/metrics` successfully. The
+browser demo is available at
+[`/demo`](https://recipe-recommender-tyhw3omfqq-uc.a.run.app/demo).
 
 Smoke test:
 
@@ -219,6 +219,7 @@ curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/predict \
 curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/similar \
   -H "Content-Type: application/json" \
   -d '{"recipe_id": 456, "top_n": 2}'
+curl https://recipe-recommender-tyhw3omfqq-uc.a.run.app/metrics
 ```
 
 Verified `/similar` response:
@@ -226,6 +227,7 @@ Verified `/similar` response:
 ```json
 {
   "seed_recipe_id": 456,
+  "search_backend": "faiss",
   "similar": [
     {"recipe_id": 153501, "name": "easy dal", "similarity": 0.9415},
     {"recipe_id": 81727, "name": "yellow lentil dal", "similarity": 0.9411}
