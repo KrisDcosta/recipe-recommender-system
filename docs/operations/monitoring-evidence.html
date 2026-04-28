@@ -97,7 +97,8 @@
         <span class="badge green">Cloud Run Ready</span>
         <span class="badge green">FAISS</span>
         <span class="badge orange">4 GiB</span>
-        <span class="badge">min=0 max=3</span>
+        <span class="badge">min=0 max=1</span>
+        <span class="badge">LLM off</span>
       </div>
     </header>
 
@@ -109,7 +110,7 @@
       </article>
       <article class="card span-3">
         <div class="label">Revision</div>
-        <div class="value small">00010-699</div>
+        <div class="value small">00011-t58</div>
         <div class="sub">100% traffic</div>
       </article>
       <article class="card span-3">
@@ -119,8 +120,8 @@
       </article>
       <article class="card span-3">
         <div class="label">Cost Control</div>
-        <div class="value">0-3</div>
-        <div class="sub">manual stop sets max instances to 0</div>
+        <div class="value">0-1</div>
+        <div class="sub">scale-to-zero idle mode with one warmable instance</div>
       </article>
 
       <article class="card span-8">
@@ -130,12 +131,8 @@
             <tr><th>Route</th><th>Count</th><th>Avg ms</th><th>p95 ms</th><th>Max ms</th></tr>
           </thead>
           <tbody>
-            <tr><td>/health</td><td>9</td><td>1.84</td><td>5.72</td><td>5.72</td></tr>
-            <tr><td>/recommend</td><td>1</td><td>449.88</td><td>449.88</td><td>449.88</td></tr>
-            <tr><td>/similar</td><td>1</td><td>22.07</td><td>22.07</td><td>22.07</td></tr>
-            <tr><td>/recommend/new-user</td><td>3</td><td>83.11</td><td>190.15</td><td>190.15</td></tr>
-            <tr><td>/demo</td><td>5</td><td>3.41</td><td>11.72</td><td>11.72</td></tr>
-            <tr><td>/explain</td><td>1</td><td>5671.73</td><td>5671.73</td><td>5671.73</td></tr>
+            <tr><td>/health</td><td>1</td><td>4.39</td><td>4.39</td><td>4.39</td></tr>
+            <tr><td>/explain</td><td>1</td><td>5.68</td><td>5.68</td><td>5.68</td></tr>
           </tbody>
         </table>
       </article>
@@ -143,11 +140,12 @@
       <article class="card span-4">
         <div class="label">Monitoring Dashboard</div>
         <div class="value small">Recipe Recommender - Cloud Run Operations</div>
-        <div class="sub">Tracks request rate, p95 latency, memory utilization, and instance count.</div>
+        <div class="sub">Tracks request rate, p95 latency, memory utilization, and instance count. LLM calls are disabled for low-cost fallback mode.</div>
         <div class="bars">
           <div class="bar-row"><span>2xx traffic</span><span class="bar"><span class="fill" style="width: 96%"></span></span><span class="ok">healthy</span></div>
           <div class="bar-row"><span>Memory</span><span class="bar"><span class="fill" style="width: 62%"></span></span><span>4 GiB</span></div>
-          <div class="bar-row"><span>Instances</span><span class="bar"><span class="fill" style="width: 33%"></span></span><span>0-3</span></div>
+          <div class="bar-row"><span>Instances</span><span class="bar"><span class="fill" style="width: 33%"></span></span><span>0-1</span></div>
+          <div class="bar-row"><span>LLM cost</span><span class="bar"><span class="fill" style="width: 0%"></span></span><span>off</span></div>
         </div>
       </article>
 

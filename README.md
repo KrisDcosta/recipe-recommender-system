@@ -88,9 +88,10 @@ The demo is a single-page app served by FastAPI. It exposes four operational pat
 - **Similar Recipes**: calls `/similar` to search the recipe embedding index.
 - **Metrics**: calls `/metrics` and displays route counts plus average, p95, and max latency.
 
-Recipe cards can call `/explain`. In the deployed service, xAI is enabled through Google
-Secret Manager and Cloud Run `--set-secrets`; if the provider is unavailable, the backend
-falls back to deterministic rule-based explanations. No API key is present in frontend code.
+Recipe cards can call `/explain`. The endpoint can use xAI through Google Secret Manager
+and Cloud Run `--set-secrets`, but the public demo currently keeps
+`ENABLE_LLM_EXPLANATIONS=false` for cost control and uses deterministic rule-based
+fallback explanations. No API key is present in frontend code.
 
 ## System Flow
 
@@ -118,7 +119,7 @@ LLM explanation, latency monitoring, and cost controls.
 - **Corrected split before optimization**: an initial item-CF benchmark failed because the split had no recipe overlap. The project uses a random split for warm-start model comparison and a temporal split to quantify deployment drift and cold-start risk.
 - **TimeAwareMF over Hybrid MF in production**: the hybrid model is implemented and evaluated, but it underperformed TimeAwareMF on RMSE, NDCG@10, and Recall@10. The deployed model stays simpler because it is empirically stronger.
 - **FAISS over an external vector database**: local FAISS gives real vector search behavior for `/similar` and cold-start recommendations without adding vendor infrastructure. The code falls back to brute-force search where FAISS wheels are unavailable.
-- **LLM explanations behind the API**: API keys never touch frontend code. `/explain` uses xAI through Cloud Run Secret Manager when enabled and falls back to deterministic explanations when the provider is unavailable.
+- **LLM explanations behind the API**: API keys never touch frontend code. `/explain` can use xAI through Cloud Run Secret Manager when enabled and falls back to deterministic explanations for the low-cost public demo.
 - **Lightweight metrics plus Cloud Monitoring**: `/metrics` is intentionally in-process for smoke tests and demos; durable operational evidence is handled by Cloud Logging and a versioned Cloud Monitoring dashboard.
 - **Cloud Run sizing and cost controls**: the service uses 4 GiB because the MF model, recipe metadata, embedder, and FAISS index can exceed 2 GiB. `min-instances=0` and the manual stop workflow keep costs bounded.
 
@@ -304,7 +305,7 @@ GitHub Actions workflows live in `.github/workflows/`:
 
 - `ci.yml`: runs package imports, pytest, and Docker image build checks on pull requests and pushes to `main`.
 - `deploy.yml`: builds the runtime image, pushes it to Artifact Registry, deploys to Cloud Run on pushes to `main`, then smoke-tests `/health`, `/recommend`, `/recommend/new-user`, `/similar`, and `/metrics`.
-- `cloud-control.yml`: manual `status`, `start`, and `stop` controls for the Cloud Run service. `stop` sets max instances to `0`; `start` restores max instances to `RUN_MAX_INSTANCES` or `3`.
+- `cloud-control.yml`: manual `status`, `start`, and `stop` controls for the Cloud Run service. `stop` sets max instances to `0`; `start` restores max instances to `RUN_MAX_INSTANCES` or `1`.
 
 Cloud Run loads both MF and embedder artifacts from GCS at startup when local mounted
 files are absent. `/health` reports `time_aware_mf` and `embedder` when both artifacts

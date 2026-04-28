@@ -118,7 +118,7 @@ Manual actions:
 
 - `status`: print URL, traffic, memory, and current revision status.
 - `stop`: set `min-instances=0` and `max-instances=0`.
-- `start`: set `min-instances=0` and `max-instances=RUN_MAX_INSTANCES` or `3`.
+- `start`: set `min-instances=0` and `max-instances=RUN_MAX_INSTANCES` or `1`.
 
 ## Operational Alerts Worth Adding
 

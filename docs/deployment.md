@@ -91,7 +91,7 @@ Use the `Cloud Run Control` GitHub Actions workflow for manual operations:
 
 - `status`: prints service URL, traffic split, revision status, memory, and autoscaling annotations.
 - `stop`: sets `min-instances=0` and `max-instances=0`.
-- `start`: sets `min-instances=0` and `max-instances` back to `RUN_MAX_INSTANCES` or `3`.
+- `start`: sets `min-instances=0` and `max-instances` back to `RUN_MAX_INSTANCES` or `1`.
 
 The equivalent local commands are:
 
@@ -106,5 +106,5 @@ gcloud run services update recipe-recommender \
   --project PROJECT_ID \
   --region us-central1 \
   --min-instances 0 \
-  --max-instances 3
+  --max-instances 1
 ```

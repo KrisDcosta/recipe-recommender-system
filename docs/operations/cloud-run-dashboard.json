@@ -148,7 +148,7 @@
           "title": "Operational runbook",
           "text": {
             "format": "MARKDOWN",
-            "content": "Watch 5xx response classes, p95 latency, memory utilization, and instance count after each deploy. Use the `Cloud Run Control` GitHub Actions workflow to stop the service by setting max instances to 0, then restart by restoring max instances to 3."
+            "content": "Watch 5xx response classes, p95 latency, memory utilization, and instance count after each deploy. Use the `Cloud Run Control` GitHub Actions workflow to stop the service by setting max instances to 0, then restart by restoring max instances to 1."
           }
         }
       }

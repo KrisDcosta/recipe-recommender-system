@@ -22,12 +22,14 @@ The dashboard tracks:
 ```text
 URL: https://recipe-recommender-tyhw3omfqq-uc.a.run.app
 Ready: True
-Revision: recipe-recommender-00010-699
+Revision: recipe-recommender-00011-t58
 Traffic: 100% latest revision
 CPU: 1
 Memory: 4Gi
 Container concurrency: 80
-Max instances: 3
+Min instances: 0
+Max instances: 1
+LLM explanations: disabled; rule-based fallback active
 ```
 
 ## Live Health Check
@@ -50,13 +52,8 @@ so it is runtime evidence rather than a durable analytics store.
   "model": "time_aware_mf",
   "vector_store": "faiss",
   "latency": {
-    "/health": {"count": 9, "avg_ms": 1.84, "p95_ms": 5.72, "max_ms": 5.72},
-    "/recommend": {"count": 1, "avg_ms": 449.88, "p95_ms": 449.88, "max_ms": 449.88},
-    "/similar": {"count": 1, "avg_ms": 22.07, "p95_ms": 22.07, "max_ms": 22.07},
-    "/recommend/new-user": {"count": 3, "avg_ms": 83.11, "p95_ms": 190.15, "max_ms": 190.15},
-    "/metrics": {"count": 5, "avg_ms": 1.0, "p95_ms": 1.28, "max_ms": 1.28},
-    "/demo": {"count": 5, "avg_ms": 3.41, "p95_ms": 11.72, "max_ms": 11.72},
-    "/explain": {"count": 1, "avg_ms": 5671.73, "p95_ms": 5671.73, "max_ms": 5671.73}
+    "/health": {"count": 1, "avg_ms": 4.39, "p95_ms": 4.39, "max_ms": 4.39},
+    "/explain": {"count": 1, "avg_ms": 5.68, "p95_ms": 5.68, "max_ms": 5.68}
   }
 }
 ```

@@ -14,6 +14,7 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY || 'recipe-recommender' }}
   RUN_SERVICE_ACCOUNT: ${{ vars.RUN_SERVICE_ACCOUNT }}
+  RUN_MAX_INSTANCES: ${{ vars.RUN_MAX_INSTANCES || '1' }}
 
 jobs:
   deploy:
@@ -67,7 +68,7 @@ jobs:
             --memory 4Gi \
             --cpu 1 \
             --min-instances 0 \
-            --max-instances 3 \
+            --max-instances "${RUN_MAX_INSTANCES}" \
             --service-account "${RUN_SERVICE_ACCOUNT}" \
             --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},MODEL_NAME=${MODEL_NAME},LOG_LEVEL=info,LLM_PROVIDER=${LLM_PROVIDER},LLM_BASE_URL=${LLM_BASE_URL},LLM_MODEL=${LLM_MODEL},ENABLE_LLM_EXPLANATIONS=${ENABLE_LLM_EXPLANATIONS}" \
             --set-secrets "XAI_API_KEY=XAI_API_KEY:latest" \

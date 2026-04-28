@@ -19,7 +19,7 @@ permissions:
 env:
   SERVICE_NAME: recipe-recommender
   GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
-  START_MAX_INSTANCES: ${{ vars.RUN_MAX_INSTANCES || '3' }}
+  START_MAX_INSTANCES: ${{ vars.RUN_MAX_INSTANCES || '1' }}
 
 jobs:
   control:
