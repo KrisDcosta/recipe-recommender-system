@@ -68,14 +68,52 @@ CLI/API/Docker/Cloud Run path.
 - **Time-aware improvement is statistically significant**: bootstrap CI and paired t-test confirm the gap is not sampling noise.
 - **LLM embeddings add semantic content signal**: all-MiniLM-L6-v2 on recipe name + ingredients captures similarity that bag-of-words can miss.
 - **FAISS powers scalable semantic search**: `/similar` uses a FAISS IndexFlatIP vector store when available, with a brute-force fallback for local platforms without FAISS wheels.
+- **Cold-start recommendations are user-facing**: `/recommend/new-user` builds a semantic profile from liked/disliked recipe IDs and preference chips, so the demo works without knowing a historical Food.com `user_id`.
 - **Hybrid architecture was evaluated honestly**: the implemented hybrid combines TimeAwareMF scores with all-MiniLM-L6-v2 recipe embeddings, but the full run underperformed the simpler time-aware model, so it remains opt-in.
-- **Production path verified locally**: CLI training writes model artifacts, FastAPI serves predictions, `/demo` provides a browser UI, `/metrics` reports latency, and Docker Compose returns `/health` with the trained model loaded.
+- **Production path verified end-to-end**: CLI training writes model artifacts, FastAPI serves predictions, `/demo` provides a browser UI, `/metrics` reports latency, GitHub Actions deploys to Cloud Run, and live smoke tests verify the deployed service.
 
 ## Architecture
 
 ![Recipe recommender architecture](docs/architecture.png)
 
 Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
+
+## Live Demo
+
+Live app: [`/demo`](https://recipe-recommender-tyhw3omfqq-uc.a.run.app/demo)
+
+![Recipe recommender demo](docs/demo.png)
+
+The demo is a single-page app served by FastAPI. It exposes four operational paths:
+
+- **Existing User**: calls `/recommend` with a Food.com `user_id` and returns TimeAwareMF top-N recommendations.
+- **New User**: calls `/recommend/new-user` using liked/disliked recipe IDs and preference chips, then retrieves semantic cold-start recommendations from FAISS.
+- **Similar Recipes**: calls `/similar` to search the recipe embedding index.
+- **Metrics**: calls `/metrics` and displays route counts plus average, p95, and max latency.
+
+Recipe cards can call `/explain`. In the deployed service, xAI is enabled through Google
+Secret Manager and Cloud Run `--set-secrets`; if the provider is unavailable, the backend
+falls back to deterministic rule-based explanations. No API key is present in frontend code.
+
+## System Flow
+
+```text
+Food.com RAW_interactions.csv + RAW_recipes.csv
+  -> data validation and preprocessing
+  -> zero-rating cleanup and train/validation/test split
+  -> TimeAwareMF training for rating prediction
+  -> recipe text embedding generation
+  -> model, user history, embedder artifacts saved as .joblib
+  -> artifacts uploaded to GCS
+  -> GitHub Actions builds Docker image and deploys Cloud Run
+  -> FastAPI downloads artifacts at startup
+  -> FAISS IndexFlatIP is built in memory when available
+  -> /recommend, /recommend/new-user, /similar, /explain, /metrics, /demo serve users
+```
+
+This keeps the project scoped to the Food.com dataset while still presenting a realistic
+MLOps system: reproducible training, artifact handoff, cloud serving, semantic retrieval,
+LLM explanation, latency monitoring, and cost controls.
 
 ## Project Structure
 
@@ -86,9 +124,10 @@ Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
 ├── .github/workflows/      # CI and Cloud Run deployment workflows
 ├── app/                    # FastAPI inference service
 │   ├── main.py             # startup model loading, /health
-│   ├── demo.py             # browser demo backed by /recommend
+│   ├── demo.py             # browser demo route
+│   ├── demo_assets/        # integrated single-page recommender UI
 │   ├── schemas.py          # Pydantic request/response schemas
-│   └── routers/            # /predict, /recommend, /similar
+│   └── routers/            # /predict, /recommend, /recommend/new-user, /similar, /explain, /metrics
 ├── scripts/                # reproducible training/evaluation CLIs
 │   ├── train.py
 │   ├── evaluate.py
@@ -114,6 +153,7 @@ Source: [`docs/architecture.excalidraw`](docs/architecture.excalidraw)
 ├── docs/
 │   ├── architecture.excalidraw
 │   ├── architecture.png
+│   ├── demo.png            # live UI screenshot
 │   ├── deployment.md       # CI/CD, Cloud Run, and GCS artifact setup
 │   └── monitoring.md       # latency metrics, Cloud Logging, and cost controls
 ├── models/                 # saved model artifacts (not in git)
@@ -193,13 +233,14 @@ docker compose up --build
 curl http://localhost:8080/health
 ```
 
-Verified Phase 3 serving stack:
+Verified serving stack:
 
 ```text
-pytest: 161 passed, 2 skipped
+pytest: 162 passed, 2 skipped
 FastAPI /health: 200 OK
 Docker Compose /health: 200 OK
 Loaded model artifacts: time_aware_mf, embedder
+Docker vector backend: faiss
 ```
 
 ## CI/CD and Cloud Run
@@ -210,10 +251,12 @@ Live API:
 https://recipe-recommender-tyhw3omfqq-uc.a.run.app
 ```
 
-Current status: on April 27, 2026, GitHub Actions deployed the 4 GiB Cloud Run revision.
+Current status: on April 28, 2026, GitHub Actions deployed the 4 GiB Cloud Run revision
+from commit `846d1d4`.
 The workflow smoke-tests `/health`, `/recommend`, `/recommend/new-user`, `/similar`,
 and `/metrics`. The browser demo is available at
 [`/demo`](https://recipe-recommender-tyhw3omfqq-uc.a.run.app/demo).
+Manual post-deploy validation also verified `/demo` and `/explain`.
 
 Smoke test:
 
@@ -230,7 +273,7 @@ curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/recommend/new-us
   -d '{"liked_recipe_ids": [456], "top_n": 2}'
 curl -X POST https://recipe-recommender-tyhw3omfqq-uc.a.run.app/explain \
   -H "Content-Type: application/json" \
-  -d '{"user_id": 123, "top_n": 2}'
+  -d '{"liked_recipe_ids": [456], "recommendations": [{"recipe_id": 153501, "name": "easy dal", "score": 0.9415}], "top_n": 1}'
 curl https://recipe-recommender-tyhw3omfqq-uc.a.run.app/metrics
 ```
 
@@ -265,6 +308,13 @@ See [`docs/monitoring.md`](docs/monitoring.md) for latency metrics, logging quer
 recommended alerts, and cost-control operations.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
 variables, GCS artifact layout, and the optional Cloud Build path.
+
+## Resume Bullets
+
+- Built and deployed an end-to-end recipe recommender on 1.1M Food.com interactions and 231K recipes, improving RMSE from a 0.7251 global baseline to 0.6834 with time-aware matrix factorization.
+- Diagnosed benchmark leakage and data-quality issues, including a broken item-CF split and 60,847 zero-rating rows, then documented corrected evaluation with RMSE, NDCG@10, Recall@10, bootstrap CI, and paired tests.
+- Productionized the model with FastAPI, Docker, GitHub Actions, Artifact Registry, GCS artifacts, and Cloud Run; added deployed smoke tests for health, recommendations, semantic search, and latency metrics.
+- Added FAISS-backed semantic recipe retrieval, cold-start onboarding recommendations, xAI-powered explanation support through Secret Manager, and a browser demo that exposes existing-user, new-user, similar-recipe, and monitoring workflows.
 
 ## Notebook Sections
 
