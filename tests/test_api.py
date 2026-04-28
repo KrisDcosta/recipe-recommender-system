@@ -179,12 +179,21 @@ class TestDemo:
 
     def test_demo_calls_recommend_endpoint(self, client):
         r = client.get("/demo")
-        assert 'fetch("/recommend"' in r.text
+        assert "fetch(`${this.baseURL}/recommend`" in r.text
 
     def test_demo_calls_new_user_and_explain_endpoints(self, client):
         r = client.get("/demo")
-        assert 'fetch("/recommend/new-user"' in r.text
-        assert 'fetch("/explain"' in r.text
+        assert "fetch(`${this.baseURL}/recommend/new-user`" in r.text
+        assert "fetch(`${this.baseURL}/explain`" in r.text
+
+    def test_demo_has_required_tabs_and_metrics(self, client):
+        r = client.get("/demo")
+        assert "Existing User" in r.text
+        assert "New User" in r.text
+        assert "Similar Recipes" in r.text
+        assert "Metrics" in r.text
+        assert "fetch(`${this.baseURL}/similar`" in r.text
+        assert "fetch(`${this.baseURL}/metrics`" in r.text
 
 
 # ── Startup artifact helpers ─────────────────────────────────────────────────
