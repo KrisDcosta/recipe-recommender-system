@@ -1,8 +1,5 @@
 # Recipe Recommender: Time-Aware Collaborative Filtering + LLM Embeddings
 
-[![CI](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/ci.yml/badge.svg)](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/ci.yml)
-[![Deploy to Cloud Run](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/deploy.yml/badge.svg)](https://github.com/KrisDcosta/CSE258_A2/actions/workflows/deploy.yml)
-
 Rating prediction and top-N recommendation on 1.1M Food.com interactions (231K recipes,
 2000–2018). The project has two threads: (1) benchmark integrity — fixing a broken
 evaluation split and verifying zero-rating semantics; (2) model progression from global
@@ -115,11 +112,23 @@ This keeps the project scoped to the Food.com dataset while still presenting a r
 MLOps system: reproducible training, artifact handoff, cloud serving, semantic retrieval,
 LLM explanation, latency monitoring, and cost controls.
 
+## Decisions and Tradeoffs
+
+- **Dataset quality before modeling**: zero ratings were removed because Food.com uses `0` for missing explicit star ratings, not negative preference. Keeping them would have trained the model on false dislikes.
+- **Corrected split before optimization**: an initial item-CF benchmark failed because the split had no recipe overlap. The project uses a random split for warm-start model comparison and a temporal split to quantify deployment drift and cold-start risk.
+- **TimeAwareMF over Hybrid MF in production**: the hybrid model is implemented and evaluated, but it underperformed TimeAwareMF on RMSE, NDCG@10, and Recall@10. The deployed model stays simpler because it is empirically stronger.
+- **FAISS over an external vector database**: local FAISS gives real vector search behavior for `/similar` and cold-start recommendations without adding vendor infrastructure. The code falls back to brute-force search where FAISS wheels are unavailable.
+- **LLM explanations behind the API**: API keys never touch frontend code. `/explain` uses xAI through Cloud Run Secret Manager when enabled and falls back to deterministic explanations when the provider is unavailable.
+- **Lightweight metrics plus Cloud Monitoring**: `/metrics` is intentionally in-process for smoke tests and demos; durable operational evidence is handled by Cloud Logging and a versioned Cloud Monitoring dashboard.
+- **Cloud Run sizing and cost controls**: the service uses 4 GiB because the MF model, recipe metadata, embedder, and FAISS index can exceed 2 GiB. `min-instances=0` and the manual stop workflow keep costs bounded.
+
 ## Project Structure
 
 ```
 .
-├── assignment2_1.ipynb     # analysis notebook: EDA → models → evaluation
+├── notebooks/
+│   ├── recipe_recommender_analysis.ipynb # main analysis: EDA → models → evaluation
+│   └── prototype_baselines.ipynb         # early baseline/modeling iteration
 ├── FINDINGS.md             # benchmark integrity, zero-rating, drift, cold-start narrative
 ├── .github/workflows/      # CI and Cloud Run deployment workflows
 ├── app/                    # FastAPI inference service
@@ -154,6 +163,7 @@ LLM explanation, latency monitoring, and cost controls.
 │   ├── architecture.excalidraw
 │   ├── architecture.png
 │   ├── demo.png            # live UI screenshot
+│   ├── operations/         # monitoring dashboard config and evidence screenshot
 │   ├── deployment.md       # CI/CD, Cloud Run, and GCS artifact setup
 │   └── monitoring.md       # latency metrics, Cloud Logging, and cost controls
 ├── models/                 # saved model artifacts (not in git)
@@ -179,7 +189,7 @@ pip install -e ".[dev,api,embeddings]"
 pytest tests/ -v
 
 # 4. Run notebook
-jupyter lab assignment2_1.ipynb
+jupyter lab notebooks/recipe_recommender_analysis.ipynb
 ```
 
 Run cells top-to-bottom from repo root. Data loading (~30s), Item-CF (~10min), MF training (~15min),
@@ -310,13 +320,6 @@ and cost-control operations.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
 variables, GCS artifact layout, and the optional Cloud Build path.
 
-## Resume Bullets
-
-- Built and deployed an end-to-end recipe recommender on 1.1M Food.com interactions and 231K recipes, improving RMSE from a 0.7251 global baseline to 0.6834 with time-aware matrix factorization.
-- Diagnosed benchmark leakage and data-quality issues, including a broken item-CF split and 60,847 zero-rating rows, then documented corrected evaluation with RMSE, NDCG@10, Recall@10, bootstrap CI, and paired tests.
-- Productionized the model with FastAPI, Docker, GitHub Actions, Artifact Registry, GCS artifacts, and Cloud Run; added deployed smoke tests for health, recommendations, semantic search, and latency metrics.
-- Added FAISS-backed semantic recipe retrieval, cold-start onboarding recommendations, xAI-powered explanation support through Secret Manager, and a browser demo that exposes existing-user, new-user, similar-recipe, and monitoring workflows.
-
 ## Notebook Sections
 
 | Section | Content |
@@ -330,7 +333,3 @@ variables, GCS artifact layout, and the optional Cloud Build path.
 | 6. Ranking Metrics | NDCG@10, Recall@10, sampled negatives, static vs time-aware |
 | 7. A/B Statistical Framework | Bootstrap CI, paired t-test, Cohen's d, would-deploy decision |
 | 8. LLM Semantic Embeddings | all-MiniLM-L6-v2 embeddings, LLM Ridge, Hybrid MF+LLM, similar-recipe explorer |
-
-## Course
-
-CSE 258R: Recommender Systems & Web Mining · UC San Diego · Fall 2025
