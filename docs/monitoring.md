@@ -40,6 +40,46 @@ Example:
 The metric store is intentionally lightweight and in-memory. It is useful for smoke
 tests, demos, and Cloud Run troubleshooting, but it resets when a container restarts.
 
+Current live evidence is captured in
+[`docs/operations/monitoring-evidence.md`](operations/monitoring-evidence.md), with a
+visual screenshot at [`docs/operations/monitoring-evidence.png`](operations/monitoring-evidence.png).
+
+## Google Cloud Monitoring Dashboard
+
+A Cloud Monitoring dashboard has been created for the deployed service:
+
+```text
+Recipe Recommender - Cloud Run Operations
+projects/544327697237/dashboards/c27d1740-9183-4bdf-aa2a-caff3c0604bf
+```
+
+Console link:
+
+```text
+https://console.cloud.google.com/monitoring/dashboards/custom/c27d1740-9183-4bdf-aa2a-caff3c0604bf?project=noted-gift-494503
+```
+
+The dashboard definition is versioned in
+[`docs/operations/cloud-run-dashboard.json`](operations/cloud-run-dashboard.json). It
+contains widgets for request rate by response class, p95 latency, memory utilization,
+instance count, and a short runbook note.
+
+To recreate the dashboard:
+
+```bash
+gcloud monitoring dashboards create \
+  --project noted-gift-494503 \
+  --config-from-file docs/operations/cloud-run-dashboard.json
+```
+
+To list matching dashboards:
+
+```bash
+gcloud monitoring dashboards list \
+  --project noted-gift-494503 \
+  --format='value(name,displayName)' | rg 'Recipe Recommender'
+```
+
 ## Request Logging
 
 Each request emits a structured log line:
@@ -56,6 +96,16 @@ gcloud logging read \
   --project PROJECT_ID \
   --limit 100 \
   --freshness=1h
+```
+
+5xx-only query:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="recipe-recommender" AND httpRequest.status>=500' \
+  --project PROJECT_ID \
+  --limit 50 \
+  --freshness=24h
 ```
 
 ## Cloud Run Cost Controls

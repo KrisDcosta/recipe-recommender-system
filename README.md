@@ -305,7 +305,8 @@ LLM explanations are optional. If `ENABLE_LLM_EXPLANATIONS=true` and `XAI_API_KE
 available, `/explain` calls the configured xAI-compatible chat endpoint; otherwise it
 returns deterministic rule-based explanations.
 See [`docs/monitoring.md`](docs/monitoring.md) for latency metrics, logging queries,
-recommended alerts, and cost-control operations.
+the Cloud Monitoring dashboard, operational evidence screenshots, recommended alerts,
+and cost-control operations.
 See [`docs/deployment.md`](docs/deployment.md) for required GitHub secrets, repository
 variables, GCS artifact layout, and the optional Cloud Build path.
 
