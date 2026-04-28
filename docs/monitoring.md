@@ -80,6 +80,42 @@ gcloud monitoring dashboards list \
   --format='value(name,displayName)' | rg 'Recipe Recommender'
 ```
 
+## Load Testing
+
+The repository includes a Locust smoke-load script at [`locustfile.py`](../locustfile.py)
+covering `/recommend`, `/recommend/new-user`, `/similar`, and `/metrics`.
+
+Install dev dependencies:
+
+```bash
+python -m pip install -e ".[dev,api]"
+```
+
+Run a cost-capped Cloud Run load test:
+
+```bash
+locust --headless \
+  -u 20 \
+  -r 2 \
+  --run-time 60s \
+  --host https://recipe-recommender-tyhw3omfqq-uc.a.run.app \
+  --html results/locust_report_warm.html \
+  --csv results/locust_20u_warm
+```
+
+Current results with `min-instances=0` and `max-instances=1`:
+
+| Scenario | Requests | Failure rate | Throughput | Overall p95 | Note |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 20 users, cold start | 10 | 100% | 0.21 req/s | ~22 s | Cloud Run had no warm instance available while capped at one instance. |
+| 20 users, warm | 260 | 0.38% | 4.35 req/s | 5.2 s | One connection reset; `/recommend` p95 was 5.7 s. |
+| 10 users, warm | 120 | 0% | 2.01 req/s | 1.5 s | Stable single-instance demo setting; `/recommend` p95 was 1.8 s. |
+
+Interpretation: the low-cost public demo configuration is intentionally conservative.
+It is acceptable for demos and resume validation, but higher concurrency should raise
+`RUN_MAX_INSTANCES`, keep at least one warm instance, or precompute/cache heavier
+recommendation paths.
+
 ## Request Logging
 
 Each request emits a structured log line:
