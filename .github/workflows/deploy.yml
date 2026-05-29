@@ -67,7 +67,7 @@ jobs:
             --allow-unauthenticated \
             --memory 4Gi \
             --cpu 1 \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances "${RUN_MAX_INSTANCES}" \
             --service-account "${RUN_SERVICE_ACCOUNT}" \
             --set-env-vars "MODEL_GCS_URI=${MODEL_GCS_URI},RECIPES_GCS_URI=${RECIPES_GCS_URI},MODEL_NAME=${MODEL_NAME},LOG_LEVEL=info,LLM_PROVIDER=${LLM_PROVIDER},LLM_BASE_URL=${LLM_BASE_URL},LLM_MODEL=${LLM_MODEL},ENABLE_LLM_EXPLANATIONS=${ENABLE_LLM_EXPLANATIONS}" \

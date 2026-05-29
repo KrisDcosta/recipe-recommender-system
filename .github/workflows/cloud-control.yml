@@ -56,7 +56,7 @@ jobs:
           gcloud run services update "${SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances "${START_MAX_INSTANCES}" \
             --quiet
 
